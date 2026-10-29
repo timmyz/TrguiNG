@@ -24,7 +24,7 @@ import React, { forwardRef, memo, useCallback, useContext, useEffect, useMemo, u
 import * as Icon from "react-bootstrap-icons";
 import PriorityIcon from "svg/icons/priority.svg";
 import type { PriorityNumberType } from "rpc/transmission";
-import { BandwidthPriority } from "rpc/transmission";
+import { BandwidthPriority, Status } from "rpc/transmission";
 import { useTorrentAction, useMutateSession, useMutateTorrent } from "queries";
 import { notifications } from "@mantine/notifications";
 import type { TorrentActionMethodsType } from "rpc/client";
@@ -33,7 +33,7 @@ import type { HotkeyHandlers } from "hotkeys";
 import { useHotkeysContext } from "hotkeys";
 import { useHotkeys } from "@mantine/hooks";
 import { modKeyString } from "trutil";
-import { useServerSelectedTorrents } from "rpc/torrent";
+import { useServerSelectedTorrents, useServerTorrentData } from "rpc/torrent";
 import { ConfigContext } from "config";
 import { useTranslation } from "react-i18next";
 
@@ -69,6 +69,7 @@ interface ToolbarProps {
     toggleDetailsPanel: () => void,
     toggleMainSplit: () => void,
     toggleTabStrip: () => void,
+    toggleRunStatus?: () => void,
 }
 
 function useButtonHandlers(
@@ -77,9 +78,30 @@ function useButtonHandlers(
     setAltSpeedMode: React.Dispatch<boolean | undefined>,
 ) {
     const { t } = useTranslation();
+    const serverData = useServerTorrentData();
     const serverSelected = useServerSelectedTorrents();
     const actionMutate = useTorrentAction();
     const { mutate: mutateTorrent } = useMutateTorrent();
+
+    const batchTorrentIds = useMemo(() => ({
+        startAll: serverData.torrents
+            .filter((torrent) => torrent.status === Status.stopped)
+            .map((torrent) => torrent.id as number),
+        startCompleted: serverData.torrents
+            .filter((torrent) => torrent.status === Status.stopped
+                && torrent.sizeWhenDone > 0
+                && Math.max(torrent.sizeWhenDone - torrent.haveValid, 0) === 0)
+            .map((torrent) => torrent.id as number),
+        pauseAll: serverData.torrents
+            .filter((torrent) => torrent.status !== Status.stopped)
+            .map((torrent) => torrent.id as number),
+        pauseError: serverData.torrents
+            .filter((torrent) => torrent.error !== 0 || torrent.cachedError !== "")
+            .map((torrent) => torrent.id as number),
+        pauseDownloading: serverData.torrents
+            .filter((torrent) => torrent.status === Status.downloading)
+            .map((torrent) => torrent.id as number),
+    }), [serverData.torrents]);
 
     const handlers = useMemo(() => {
         const checkSelected = (action?: () => void) => {
@@ -94,6 +116,30 @@ function useButtonHandlers(
                     torrentIds: Array.from(serverSelected),
                 },
                 {
+                    onError: (e) => {
+                        console.error("Error running torrent update method", method, e);
+                        notifications.show({
+                            message: t("toolbar.notifications.errorUpdatingTorrent"),
+                            color: "red",
+                        });
+                    },
+                },
+            );
+        };
+        const batchAction = (method: TorrentActionMethodsType, successMessage: string, torrentIds: number[]) => () => {
+            if (torrentIds.length === 0) return;
+            actionMutate(
+                {
+                    method,
+                    torrentIds,
+                },
+                {
+                    onSuccess: () => {
+                        notifications.show({
+                            message: successMessage,
+                            color: "green",
+                        });
+                    },
                     onError: (e) => {
                         console.error("Error running torrent update method", method, e);
                         notifications.show({
@@ -131,6 +177,11 @@ function useButtonHandlers(
         return {
             start: checkSelected(action("torrent-start")),
             pause: checkSelected(action("torrent-stop")),
+            startAll: batchAction("torrent-start", t("torrents.notifications.torrentsStarted"), batchTorrentIds.startAll),
+            startCompleted: batchAction("torrent-start", t("torrents.notifications.torrentsStarted"), batchTorrentIds.startCompleted),
+            pauseAll: batchAction("torrent-stop", t("torrents.notifications.torrentsStopped"), batchTorrentIds.pauseAll),
+            pauseError: batchAction("torrent-stop", t("torrents.notifications.torrentsStopped"), batchTorrentIds.pauseError),
+            pauseDownloading: batchAction("torrent-stop", t("torrents.notifications.torrentsStopped"), batchTorrentIds.pauseDownloading),
             remove: checkSelected(props.modals.current?.remove),
             queueDown: checkSelected(action("queue-move-down")),
             queueUp: checkSelected(action("queue-move-up")),
@@ -141,7 +192,7 @@ function useButtonHandlers(
             setPriorityLow: checkSelected(priority(BandwidthPriority.low)),
             daemonSettings: () => { props.modals.current?.daemonSettings(); },
         };
-    }, [actionMutate, mutateTorrent, props.modals, serverSelected, t]);
+    }, [actionMutate, batchTorrentIds, mutateTorrent, props.modals, serverSelected, t]);
 
     const sessionMutation = useMutateSession();
 
@@ -168,6 +219,7 @@ function useButtonHandlers(
     return {
         ...handlers,
         toggleAltSpeedMode,
+        batchTorrentIds,
     };
 }
 
@@ -223,6 +275,7 @@ function Toolbar(props: ToolbarProps) {
         ["mod + Y", props.toggleFiltersPanel],
         ["mod + I", props.toggleDetailsPanel],
         ["mod + [", props.toggleTabStrip],
+        ...(props.toggleRunStatus !== undefined ? [["mod + R", props.toggleRunStatus] as [string, () => void]] : []),
     ]);
 
     const onSettingsExport = useCallback(() => {
@@ -287,6 +340,61 @@ function Toolbar(props: ToolbarProps) {
                 >
                     <Icon.XCircleFill size="1.5rem" color="var(--mantine-color-red-6)" />
                 </ToolbarButton>
+            </Button.Group>
+
+            <Button.Group mx="sm">
+                <Menu
+                    shadow="md"
+                    width="14rem"
+                    withinPortal
+                    returnFocus
+                    middlewares={{ shift: true, flip: false }}
+                >
+                    <Menu.Target>
+                        <ToolbarButton title={`${t("toolbar.startAllTorrents")} / ${t("toolbar.pauseAllTorrents")}`}>
+                            <Icon.ListTask size="1.5rem" color="var(--mantine-color-blue-6)" />
+                        </ToolbarButton>
+                    </Menu.Target>
+
+                    <Menu.Dropdown>
+                        <Menu.Item
+                            onClick={handlers.startAll}
+                            leftSection={<Icon.PlayFill size="1.1rem" color="var(--mantine-color-green-8)" />}
+                            disabled={handlers.batchTorrentIds.startAll.length === 0}
+                        >
+                            {t("toolbar.startAllTorrents")}
+                        </Menu.Item>
+                        <Menu.Item
+                            onClick={handlers.startCompleted}
+                            leftSection={<Icon.PlayFill size="1.1rem" color="var(--mantine-color-blue-6)" />}
+                            disabled={handlers.batchTorrentIds.startCompleted.length === 0}
+                        >
+                            {t("toolbar.startCompletedTorrents")}
+                        </Menu.Item>
+                        <Menu.Divider />
+                        <Menu.Item
+                            onClick={handlers.pauseAll}
+                            leftSection={<Icon.PauseFill size="1.1rem" color="var(--mantine-color-blue-6)" />}
+                            disabled={handlers.batchTorrentIds.pauseAll.length === 0}
+                        >
+                            {t("toolbar.pauseAllTorrents")}
+                        </Menu.Item>
+                        <Menu.Item
+                            onClick={handlers.pauseError}
+                            leftSection={<Icon.PauseFill size="1.1rem" color="var(--mantine-color-red-6)" />}
+                            disabled={handlers.batchTorrentIds.pauseError.length === 0}
+                        >
+                            {t("toolbar.pauseErrorTorrents")}
+                        </Menu.Item>
+                        <Menu.Item
+                            onClick={handlers.pauseDownloading}
+                            leftSection={<Icon.PauseFill size="1.1rem" color="var(--mantine-color-yellow-6)" />}
+                            disabled={handlers.batchTorrentIds.pauseDownloading.length === 0}
+                        >
+                            {t("toolbar.pauseDownloadingTorrents")}
+                        </Menu.Item>
+                    </Menu.Dropdown>
+                </Menu>
             </Button.Group>
 
             <Button.Group mx="sm">
@@ -427,6 +535,13 @@ function Toolbar(props: ToolbarProps) {
                             rightSection={<Kbd>{`${modKeyString()} [`}</Kbd>}
                         >
                             {t("toolbar.toggleTabStrip")}
+                        </Menu.Item>}
+                    {props.toggleRunStatus !== undefined
+                        && <Menu.Item
+                            onClick={props.toggleRunStatus}
+                            rightSection={<Kbd>{`${modKeyString()} R`}</Kbd>}
+                        >
+                            {t("toolbar.toggleRunStatus")}
                         </Menu.Item>}
                     <Menu.Divider />
                     <Menu.Label>{t("toolbar.interfaceSettings")}</Menu.Label>

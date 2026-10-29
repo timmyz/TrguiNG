@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { Box, Flex, Loader, Overlay, Title } from "@mantine/core";
+import { Box, Flex, Loader, Overlay, Text, Textarea, Title } from "@mantine/core";
 import classes from "./server.module.css";
 import React, { useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { SplitType } from "../config";
@@ -38,6 +38,7 @@ import { SplitLayout } from "./splitlayout";
 import { useDisclosure, useToggle } from "@mantine/hooks";
 import type { ServerTabsRef } from "./servertabs";
 import { useTranslation } from "react-i18next";
+import { RunStatus } from "../status";
 
 function currentFiltersReducer(
     oldFilters: TorrentFilter[],
@@ -118,6 +119,11 @@ export function Server({ hostname, tabsRef, toolbarExtra, toggleTabStrip }: Serv
     const { t } = useTranslation();
     useAppHotkeys();
 
+    const initialStatus = useMemo(() => new RunStatus(), []);
+    const [statusIde, setStatusIde] = useState<boolean>(initialStatus.ide);
+    const [statusTitle, setStatusTitle] = useState<string | undefined>(initialStatus.title);
+    const [statusContent, setStatusContent] = useState<string | undefined>(initialStatus.content);
+
     const [currentFilters, setCurrentFilters] = useReducer(currentFiltersReducer, [{ id: "", filter: DefaultFilter }]);
 
     const [searchTerms, setSearchTerms] = useState<string[]>([]);
@@ -169,6 +175,25 @@ export function Server({ hostname, tabsRef, toolbarExtra, toggleTabStrip }: Serv
         setFilteredTorrents(filtered);
     }, [torrents, currentFilters, searchFilter, currentTorrent, selectedReducer]);
 
+    const updateStatus = useCallback((s: RunStatus) => {
+        setStatusIde(s.ide);
+        if (s.title !== undefined) setStatusTitle(s.title);
+        if (s.content !== undefined) setStatusContent(s.content);
+    }, []);
+
+    useEffect(() => {
+        if (!statusIde) return;
+        const selected = filteredTorrents.filter((torrent) => selectedTorrents.has(torrent.id));
+        if (selected.length > 0) {
+            const content = selected
+                .map((torrent, idx) => `${idx + 1}: ${torrent.name} (${torrent.downloadDir})`)
+                .join("\n");
+            updateStatus(new RunStatus(true, t("runStatus.selectedTorrent"), content));
+        } else {
+            updateStatus(new RunStatus(true, t("runStatus.idle"), t("runStatus.noSelection")));
+        }
+    }, [statusIde, selectedTorrents, filteredTorrents, updateStatus, t]);
+
     selectAll.current = useCallback(() => {
         const ids = filteredTorrents.map((t) => t.id) ?? [];
         selectedReducer({ verb: "set", ids });
@@ -196,6 +221,7 @@ export function Server({ hostname, tabsRef, toolbarExtra, toggleTabStrip }: Serv
 
     const [showFiltersPanel, { toggle: toggleFiltersPanel }] = useDisclosure(config.values.interface.showFiltersPanel);
     const [showDetailsPanel, { toggle: toggleDetailsPanel }] = useDisclosure(config.values.interface.showDetailsPanel);
+    const [showRunStatus, { toggle: toggleShowRunStatus }] = useDisclosure(config.values.interface.showRunStatus);
     const [mainSplit, toggleMainSplit] = useToggle<SplitType>([
         config.values.interface.mainSplit,
         config.values.interface.mainSplit === "vertical" ? "horizontal" : "vertical"]);
@@ -203,8 +229,9 @@ export function Server({ hostname, tabsRef, toolbarExtra, toggleTabStrip }: Serv
     useEffect(() => {
         config.values.interface.showFiltersPanel = showFiltersPanel;
         config.values.interface.showDetailsPanel = showDetailsPanel;
+        config.values.interface.showRunStatus = showRunStatus;
         config.values.interface.mainSplit = mainSplit;
-    }, [config, showFiltersPanel, showDetailsPanel, mainSplit]);
+    }, [config, showFiltersPanel, showDetailsPanel, showRunStatus, mainSplit]);
 
     return <ServerContext data={serverData} selected={selectedTorrents} rpc={rpcVersion}>
         <Flex direction="column" className={classes.serverContainer}>
@@ -240,6 +267,7 @@ export function Server({ hostname, tabsRef, toolbarExtra, toggleTabStrip }: Serv
                     toggleFiltersPanel={toggleFiltersPanel}
                     toggleDetailsPanel={toggleDetailsPanel}
                     toggleMainSplit={toggleMainSplit}
+                    toggleRunStatus={toggleShowRunStatus}
                     toggleTabStrip={toggleTabStrip}
                 />
             </Box>
@@ -252,6 +280,8 @@ export function Server({ hostname, tabsRef, toolbarExtra, toggleTabStrip }: Serv
                             torrents={torrents ?? []}
                             currentFilters={currentFilters}
                             setCurrentFilters={setCurrentFilters}
+                            selectedReducer={selectedReducer}
+                            setCurrentTorrentId={setCurrentTorrent}
                         />
                     </div>
                     : undefined}
@@ -270,6 +300,26 @@ export function Server({ hostname, tabsRef, toolbarExtra, toggleTabStrip }: Serv
                     ? <MemoizedDetails torrentId={currentTorrent} updates={updates} />
                     : undefined}
             />
+            {showRunStatus && (
+                <Box
+                    px="xs"
+                    pt={4}
+                    pb={4}
+                    style={{ borderTop: "1px solid var(--mantine-color-dark-3)" }}
+                >
+                    <Flex direction="column" gap={2}>
+                        <Text size="xs" fw={600} truncate="end">{statusTitle}</Text>
+                        <Textarea
+                            readOnly
+                            autosize
+                            minRows={1}
+                            maxRows={8}
+                            value={statusContent}
+                            styles={{ input: { fontFamily: "monospace", fontSize: "var(--mantine-font-size-xs)" } }}
+                        />
+                    </Flex>
+                </Box>
+            )}
             <Box px="xs" className={classes.statusbarContainer}>
                 <Statusbar {...{
                     session,

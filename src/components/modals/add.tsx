@@ -16,10 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ActionIcon, Box, Button, Checkbox, Divider, Flex, Group, Menu, SegmentedControl, Text, Textarea, TextInput } from "@mantine/core";
+import { ActionIcon, Box, Button, Checkbox, Divider, Flex, Group, Menu, NumberInput, SegmentedControl, Text, Textarea, TextInput } from "@mantine/core";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ModalState, LocationData } from "./common";
-import { HkModal, TorrentLabels, TorrentLocation, useTorrentLocation } from "./common";
+import { HkModal, LimitedNamesList, TorrentLabels, TorrentLocation, useTorrentLocation } from "./common";
 import type { PriorityNumberType } from "rpc/transmission";
 import { PriorityColors, PriorityStrings } from "rpc/transmission";
 import type { Torrent } from "rpc/torrent";
@@ -52,6 +52,11 @@ interface AddCommonProps extends React.PropsWithChildren {
     priority: PriorityNumberType,
     setPriority: (p: PriorityNumberType) => void,
     disabled?: boolean,
+    isMagnet?: boolean,
+    delay: boolean,
+    setDelay: (b: boolean) => void,
+    delayTime: number,
+    setDelayTime: (n: number) => void,
 }
 
 function AddCommon(props: AddCommonProps) {
@@ -67,6 +72,23 @@ function AddCommon(props: AddCommonProps) {
                 inputLabel={t("modals.add.labels")}
                 disabled={props.disabled}
             />}
+        {props.isMagnet && <Group mt="lg" gap="sm" align="center">
+            <Checkbox
+                label="Download interval"
+                checked={props.delay}
+                disabled={props.disabled}
+                onChange={(e) => { props.setDelay(e.currentTarget.checked); }}
+            />
+            <NumberInput
+                w="7rem"
+                min={0}
+                max={3600}
+                disabled={props.disabled || !props.delay}
+                value={props.delayTime}
+                onChange={(v) => { props.setDelayTime(typeof v === "number" ? v : 5); }}
+                suffix={t("units.seconds")}
+            />
+        </Group>}
         <Group>
             <Checkbox
                 label={t("modals.add.startTorrent")}
@@ -101,7 +123,7 @@ function AddCommon(props: AddCommonProps) {
 
 interface AddCommonModalProps extends ModalState {
     serverName: string,
-    uri: string | File | undefined,
+    uris: Array<string | File> | undefined,
     tabsRef: React.RefObject<ServerTabsRef>,
 }
 
@@ -112,6 +134,8 @@ function useCommonProps(opened: boolean) {
     const [start, setStart] = useState<boolean>(true);
     const [sequential, setSequential] = useState<boolean>(false);
     const [priority, setPriority] = useState<PriorityNumberType>(0);
+    const [delay, setDelay] = useState<boolean>(false);
+    const [delayTime, setDelayTime] = useState<number>(5);
 
     useEffect(() => {
         if (opened) {
@@ -141,7 +165,11 @@ function useCommonProps(opened: boolean) {
         setSequential,
         priority,
         setPriority,
-    }), [opened, location, labels, start, sequential, priority]);
+        delay,
+        setDelay,
+        delayTime,
+        setDelayTime,
+    }), [opened, location, labels, start, sequential, priority, delay, delayTime]);
 
     return useMemo(() => ({
         props,
@@ -200,13 +228,22 @@ export function AddMagnet(props: AddCommonModalProps) {
     const { t } = useTranslation();
     const serverData = useServerTorrentData();
     const [magnet, setMagnet] = useState<string>("");
+    // 可能同时有多个批次的磁力链接在排队，记录所有等待中的计时器以便清理
+    const intervalTimersRef = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
 
     useEffect(() => {
         if (props.opened) {
-            if (typeof props.uri === "string") setMagnet(props.uri);
-            else setMagnet("");
+            // 批量处理：本批的磁力链接一行一个填入，后续逐个添加
+            const links = (props.uris ?? []).filter((uri): uri is string => typeof uri === "string");
+            setMagnet(links.join("\n"));
         }
-    }, [props.uri, props.opened]);
+    }, [props.uris, props.opened]);
+
+    // 组件卸载时清理下载间隔的计时器
+    useEffect(() => () => {
+        intervalTimersRef.current.forEach((timer) => clearInterval(timer));
+        intervalTimersRef.current.clear();
+    }, []);
 
     const [magnetData, setMagnetData] = useState<{ hash: string, trackers: string[] }>();
 
@@ -304,6 +341,38 @@ export function AddMagnet(props: AddCommonModalProps) {
                 autoClose: false,
             });
 
+        const progressMessage = () => t("modals.add.notifications.processingMagnetLinks", { current: currentIndex + 1, total: queue.length });
+
+        // 逐个处理磁力链接，两个链接之间可以按设置的间隔等待
+        const onLinkSettled = () => {
+            currentIndex++;
+            if (common.props.delay && common.props.delayTime > 0 && currentIndex < queue.length) {
+                waitBeforeNextLink();
+            } else {
+                processNextLink();
+            }
+        };
+
+        const waitBeforeNextLink = () => {
+            let remaining = common.props.delayTime;
+            const timer = setInterval(() => {
+                remaining--;
+                if (remaining <= 0) {
+                    clearInterval(timer);
+                    intervalTimersRef.current.delete(timer);
+                    processNextLink();
+                } else if (updateNotification !== "") {
+                    notifications.update({
+                        id: updateNotification,
+                        message: `${progressMessage()} - ${t("torrents.status.Waiting")} ${remaining}${t("units.seconds")}`,
+                        color: "blue",
+                        autoClose: false,
+                    });
+                }
+            }, 1000);
+            intervalTimersRef.current.add(timer);
+        };
+
         const processNextLink = () => {
             if (currentIndex >= queue.length) {
                 // All links processed
@@ -322,7 +391,7 @@ export function AddMagnet(props: AddCommonModalProps) {
             if (updateNotification !== "") {
                 notifications.update({
                     id: updateNotification,
-                    message: t("modals.add.notifications.processingMagnetLinks", { current: currentIndex + 1, total: queue.length }),
+                    message: progressMessage(),
                     color: "blue",
                     autoClose: false,
                 });
@@ -343,10 +412,7 @@ export function AddMagnet(props: AddCommonModalProps) {
                         canRename: false,
                     },
                     {
-                        onSettled: () => {
-                            currentIndex++;
-                            processNextLink();
-                        },
+                        onSettled: onLinkSettled,
                     },
                 );
             } else {
@@ -359,8 +425,7 @@ export function AddMagnet(props: AddCommonModalProps) {
                                 message: t("modals.add.notifications.trackersUpdated"),
                                 color: "green",
                             });
-                            currentIndex++;
-                            processNextLink();
+                            onLinkSettled();
                         },
                         onError: (error) => {
                             console.error("Failed to add trackers:", error);
@@ -369,8 +434,7 @@ export function AddMagnet(props: AddCommonModalProps) {
                                 message: String(error),
                                 color: "red",
                             });
-                            currentIndex++;
-                            processNextLink();
+                            onLinkSettled();
                         },
                     },
                 );
@@ -384,7 +448,7 @@ export function AddMagnet(props: AddCommonModalProps) {
     }, [client, serverData, common, addMutation, mutateAddTrackers, close, magnet, t]);
 
     const config = useContext(ConfigContext);
-    const shouldOpen = !config.values.interface.skipAddDialog || typeof props.uri !== "string";
+    const shouldOpen = !config.values.interface.skipAddDialog || typeof props.uris?.[0] !== "string";
     useEffect(() => {
         if (props.opened && !shouldOpen) {
             onAdd();
@@ -427,7 +491,7 @@ export function AddMagnet(props: AddCommonModalProps) {
                     minRows={6}
                     maxRows={25}
                 />
-                <AddCommon {...common.props} disabled={existingTorrent !== undefined} />
+                <AddCommon {...common.props} isMagnet={true} disabled={existingTorrent !== undefined} />
                 <Divider my="sm" />
                 <Group justify="center" gap="md">
                     <Button
@@ -463,8 +527,9 @@ function useTauriReadFile(
     setTorrentData: React.Dispatch<React.SetStateAction<TorrentFileData[] | undefined>>,
 ) {
     const { t } = useTranslation();
+    const { opened, uris, close } = props;
     useEffect(() => {
-        if (TAURI && props.opened && torrentData === undefined) {
+        if (TAURI && opened && torrentData === undefined) {
             const readFile = async (path: string | string[] | null) => {
                 if (path == null) {
                     return undefined;
@@ -476,13 +541,13 @@ function useTauriReadFile(
                 return [await invoke<TorrentFileData>("read_file", { path })];
             };
 
-            let uri = props.uri;
-            if (typeof uri === "string" && uri.startsWith("file://")) {
-                uri = decodeURIComponent(uri.substring(7));
-            }
+            // 批量处理：一次读取本批所有的种子文件
+            const paths = (uris ?? [])
+                .filter((uri): uri is string => typeof uri === "string")
+                .map((uri) => uri.startsWith("file://") ? decodeURIComponent(uri.substring(7)) : uri);
 
-            const pathPromise = typeof uri === "string"
-                ? Promise.resolve(uri)
+            const pathPromise = paths.length > 0
+                ? Promise.resolve(paths)
                 : dialogOpen({
                     title: t("modals.add.selectTorrentFileDialog"),
                     filters: [{
@@ -496,7 +561,7 @@ function useTauriReadFile(
                 .then((torrentData) => {
                     setTorrentData(torrentData);
                     if (torrentData === undefined) {
-                        props.close();
+                        close();
                     }
                 }).catch((e) => {
                     notifications.show({
@@ -504,10 +569,10 @@ function useTauriReadFile(
                         message: String(e),
                         color: "red",
                     });
-                    props.close();
+                    close();
                 });
         }
-    }, [props, setTorrentData, torrentData, t]);
+    }, [opened, uris, close, setTorrentData, torrentData, t]);
 }
 
 function useWebappReadFile(
@@ -519,35 +584,36 @@ function useWebappReadFile(
     const { t } = useTranslation();
     useEffect(() => {
         if (!TAURI && props.opened) {
-            if (props.uri === undefined) {
+            const files = (props.uris ?? []).filter((uri): uri is File => typeof uri !== "string");
+            if (files.length <= 0) {
                 if (filesInputRef.current != null) {
                     filesInputRef.current.value = "";
                     filesInputRef.current.click();
                 }
                 close();
             } else {
-                const file = props.uri as File;
-                readLocalTorrent(file, t("modals.add.notifications.errorReadingFile")).then((b64) => {
-                    setTorrentData([{
+                // 批量处理：一次读取本批所有的种子文件
+                Promise.all(files.map(async (file) => await readLocalTorrent(file, t("modals.add.notifications.errorReadingFile")))).then((filesData) => {
+                    setTorrentData(filesData.map((b64, i) => ({
                         torrentPath: "",
                         metadata: b64,
-                        name: file.name,
+                        name: files[i].name,
                         hash: "",
                         files: null,
                         trackers: [],
                         length: 0,
-                    }]);
-                }).catch(() => {
+                    })));
+                }).catch((e) => {
                     notifications.show({
                         title: t("modals.add.notifications.errorReadingFile"),
-                        message: file.name,
+                        message: String(e),
                         color: "red",
                     });
                     close();
                 });
             }
         }
-    }, [props.opened, props.uri, close, filesInputRef, setTorrentData, t]);
+    }, [props.opened, props.uris, close, filesInputRef, setTorrentData, t]);
 }
 
 function useFilesInput(
@@ -724,23 +790,30 @@ export function AddTorrent(props: AddCommonModalProps) {
         common.onAdd();
 
         if (existingTorrent === undefined) {
-            void Promise.all(torrentData.map(async (td) => {
-                return await addMutation.mutateAsync(
-                    {
-                        client,
-                        metainfo: td.metadata,
-                        downloadDir: common.props.location.path,
-                        labels: common.props.labels,
-                        paused: !common.props.start,
-                        sequential_download: common.props.sequential,
-                        bandwidthPriority: common.props.priority,
-                        unwanted: (td.files == null || torrentData.length > 1) ? undefined : fileTree.getUnwanted(),
-                        canRename: torrentData.length == 1,
-                        name: torrentName,
-                        filePath: td.torrentPath,
-                    },
-                );
-            }));
+            // 批量处理：逐个添加，避免一次性并发请求压垮服务端
+            void (async () => {
+                for (const td of torrentData) {
+                    try {
+                        await addMutation.mutateAsync(
+                            {
+                                client,
+                                metainfo: td.metadata,
+                                downloadDir: common.props.location.path,
+                                labels: common.props.labels,
+                                paused: !common.props.start,
+                                sequential_download: common.props.sequential,
+                                bandwidthPriority: common.props.priority,
+                                unwanted: (td.files == null || torrentData.length > 1) ? undefined : fileTree.getUnwanted(),
+                                canRename: torrentData.length == 1,
+                                name: torrentName,
+                                filePath: td.torrentPath,
+                            },
+                        );
+                    } catch {
+                        // 失败提示已在 mutation 的 onError 中处理，继续处理下一个文件
+                    }
+                }
+            })();
 
             common.props.location.addPath(common.props.location.path);
         } else {
@@ -784,6 +857,12 @@ export function AddTorrent(props: AddCommonModalProps) {
 
     const torrentExists = existingTorrent !== undefined;
 
+    // 批量处理：列出本批所有种子文件的名字
+    const names = useMemo<string[]>(() => {
+        if (torrentData === undefined) return [];
+        return torrentData.map((td) => td.name);
+    }, [torrentData]);
+
     const [fullScreen, toggleFullScreen] = useToggle();
 
     return (<>
@@ -825,12 +904,15 @@ export function AddTorrent(props: AddCommonModalProps) {
                 <Divider my="sm" />
                 {torrentExists
                     ? <Text c="red" fw="bold" fz="lg">{t("modals.add.torrentAlreadyExists")}</Text>
-                    : <TextInput
-                        aria-label={t("createTorrent.torrentName")}
-                        disabled={!TAURI || torrentData.length > 1}
-                        value={torrentName}
-                        onChange={(e) => setTorrentName(e.target.value)}
-                    />}
+                    : torrentData.length > 1
+                        // 批量处理：列出本批所有种子文件
+                        ? <LimitedNamesList names={names} limit={5} />
+                        : <TextInput
+                            aria-label={t("createTorrent.torrentName")}
+                            disabled={!TAURI}
+                            value={torrentName}
+                            onChange={(e) => setTorrentName(e.target.value)}
+                        />}
                 <AddCommon {...common.props} disabled={torrentExists}>
                     {(wantedSize > 0 || torrentData[0].files != null)
                         && <Text>{bytesToHumanReadableStr(wantedSize)}</Text>}

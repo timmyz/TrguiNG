@@ -17,16 +17,19 @@
  */
 
 import React, { useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { Torrent } from "../rpc/torrent";
+import { type Torrent, useServerSelectedTorrents, useServerTorrentData } from "../rpc/torrent";
 import { Status } from "../rpc/transmission";
 import * as Icon from "react-bootstrap-icons";
 import * as StatusIcons from "./statusicons";
 import type { FilterSectionName, SectionsVisibility, StatusFilterName } from "../config";
 import { ConfigContext, ServerConfigContext } from "../config";
-import { Box, Divider, Flex, Menu } from "@mantine/core";
-import { bytesToHumanReadableStr, eventHasModKey } from "trutil";
+import { ActionIcon, Box, Divider, Flex, Menu, Tooltip } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { bytesToHumanReadableStr, ensurePathDelimiter, eventHasModKey } from "trutil";
+import { copyToClipboard } from "../taurishim";
 import { useContextMenu } from "./contextmenu";
 import { MemoSectionsContextMenu, getSectionsMap } from "./sectionscontextmenu";
+import type { TableSelectReducer } from "./tables/common";
 import { useTranslation } from "react-i18next";
 
 export interface TorrentFilter {
@@ -115,6 +118,24 @@ const noLabelsFilter: NamedFilter = {
     icon: StatusIcons.Label,
 };
 
+const stoppedCompletedFilter: NamedFilter = {
+    name: "StoppedCompleted",
+    filter: (t: Torrent) => t.status === Status.stopped && (t.sizeWhenDone > 0 && Math.max(t.sizeWhenDone - t.haveValid, 0) === 0),
+    icon: StatusIcons.StoppedDone,
+};
+
+const stoppedIncompleteFilter: NamedFilter = {
+    name: "StoppedIncomplete",
+    filter: (t: Torrent) => t.status === Status.stopped && !(t.sizeWhenDone > 0 && Math.max(t.sizeWhenDone - t.haveValid, 0) === 0),
+    icon: StatusIcons.StoppedUndone,
+};
+
+const noErrorsFilter: NamedFilter = {
+    name: "<No errors>",
+    filter: (t: Torrent) => t.cachedError === "" || t.cachedError === undefined,
+    icon: StatusIcons.Error,
+};
+
 export const DefaultFilter = statusFilters[0].filter;
 
 interface WithCurrentFilters {
@@ -127,17 +148,23 @@ interface WithCurrentFilters {
 
 interface FiltersProps extends WithCurrentFilters {
     torrents: Torrent[],
+    selectedReducer: TableSelectReducer,
+    setCurrentTorrentId: (id: string) => void,
 }
 
 interface FilterRowProps extends WithCurrentFilters {
     id: string,
     filter: NamedFilter,
     label?: string,
+    level?: number,
+    torrents: Torrent[],
     stats: {
         count: number,
         size: number,
     },
     showSizes: boolean,
+    selectedReducer: TableSelectReducer,
+    setCurrentTorrentId: (id: string) => void,
 }
 
 function focusNextFilter(element: HTMLElement, next: boolean) {
@@ -185,12 +212,38 @@ function filterOnKeyDown(event: React.KeyboardEvent<HTMLElement>) {
     }
 }
 
+// Selects all torrents of a filter group when the "select group on double click" option is enabled.
+// If the currently focused torrent is not part of the selection, the first torrent of the group becomes current.
+function useSelectGroupTorrents() {
+    const config = useContext(ConfigContext);
+    const { current } = useServerTorrentData();
+    const serverSelected = useServerSelectedTorrents();
+
+    return useCallback((matching: Torrent[], selectedReducer: TableSelectReducer, setCurrentTorrentId: (id: string) => void) => {
+        if (!config.values.interface.selectFilterGroupOnDbClk) return;
+        selectedReducer({ verb: "set", ids: matching.map((t) => String(t.id)) });
+        if (matching.length > 0 && !serverSelected.has(current ?? -1)) {
+            setCurrentTorrentId(String(matching[0].id));
+        }
+    }, [config.values.interface.selectFilterGroupOnDbClk, current, serverSelected]);
+}
+
 const FilterRow = React.memo(function FilterRow(props: FilterRowProps) {
+    const selectGroupTorrents = useSelectGroupTorrents();
+
+    const onDoubleClick = useCallback((event: React.MouseEvent) => {
+        event.stopPropagation();
+        selectGroupTorrents(props.torrents.filter(props.filter.filter), props.selectedReducer, props.setCurrentTorrentId);
+    }, [props, selectGroupTorrents]);
+
     return <Flex
         align="center"
         gap="sm"
-        px="xs"
         tabIndex={-1}
+        style={{
+            paddingLeft: `calc(var(--mantine-spacing-xs) + ${(props.level ?? 0) * 1.4}em)`,
+            paddingRight: "var(--mantine-spacing-xs)",
+        }}
         className={props.currentFilters.find((f) => f.id === props.id) !== undefined ? "selected" : ""}
         onClick={(event) => {
             props.setCurrentFilters({
@@ -198,6 +251,7 @@ const FilterRow = React.memo(function FilterRow(props: FilterRowProps) {
                 filter: { id: props.id, filter: props.filter.filter },
             });
         }}
+        onDoubleClick={onDoubleClick}
         onKeyDown={filterOnKeyDown}
     >
         <div className="icon-container"><props.filter.icon /></div>
@@ -236,6 +290,18 @@ const TrackerFilterRow = React.memo(function TrackerFilterRow(props: Omit<Filter
     />;
 });
 
+const ErrorFilterRow = React.memo(function ErrorFilterRow(props: Omit<FilterRowProps, "filter" | "id"> & { error: string }) {
+    return <FilterRow
+        {...props}
+        id={`error-${props.error}`}
+        filter={{
+            name: props.error,
+            filter: (t: Torrent) => t.cachedError === props.error,
+            icon: StatusIcons.Error,
+        }}
+    />;
+});
+
 interface DirFilterRowProps extends FiltersProps {
     id: string,
     dir: Directory,
@@ -245,6 +311,8 @@ interface DirFilterRowProps extends FiltersProps {
 
 function DirFilterRow(props: DirFilterRowProps) {
     const config = useContext(ConfigContext);
+    const { t } = useTranslation();
+    const selectGroupTorrents = useSelectGroupTorrents();
     const filter = useCallback((t: Torrent) => {
         let path = t.downloadDir as string;
         if (!path.endsWith("/") && !path.endsWith("\\")) path = path + "/";
@@ -264,6 +332,18 @@ function DirFilterRow(props: DirFilterRowProps) {
         props.dir.expanded = false;
         props.expandedReducer({ verb: "remove", value: props.dir.path });
     }, [props]);
+
+    const dirPath = ensurePathDelimiter(props.dir.path);
+    const onCopyPath = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        copyToClipboard(dirPath);
+        notifications.show({ color: "green", message: t("filters.pathCopied") });
+    }, [dirPath, t]);
+
+    const onDoubleClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        selectGroupTorrents(props.torrents.filter(filter), props.selectedReducer, props.setCurrentTorrentId);
+    }, [props, filter, selectGroupTorrents]);
 
     const expandable = props.dir.subdirs.size > 0;
 
@@ -305,6 +385,7 @@ function DirFilterRow(props: DirFilterRowProps) {
                     filter: { id: props.id, filter },
                 });
             }}
+            onDoubleClick={onDoubleClick}
             onKeyDown={onKeyDown}
         >
             <div className="icon-container">
@@ -316,6 +397,19 @@ function DirFilterRow(props: DirFilterRowProps) {
             </div>
             <div style={{ flexShrink: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{props.dir.name}</div>
             <div style={{ flexShrink: 0 }}>{count}</div>
+            <Tooltip label={t("filters.copyPath")} withArrow>
+                <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size="sm"
+                    style={{ flexShrink: 0 }}
+                    aria-label={t("filters.copyPath")}
+                    onClick={onCopyPath}
+                    onDoubleClick={(e) => { e.stopPropagation(); }}
+                >
+                    <Icon.Clipboard size="0.9rem" />
+                </ActionIcon>
+            </Tooltip>
             {props.showSizes && <>
                 <div style={{ flexGrow: 1 }}></div>
                 <div style={{ flexShrink: 0 }}>{size}</div>
@@ -423,7 +517,7 @@ function statCount(torrents: Torrent[]) {
     return { count, size };
 }
 
-export const Filters = React.memo(function Filters({ torrents, currentFilters, setCurrentFilters }: FiltersProps) {
+export const Filters = React.memo(function Filters({ torrents, currentFilters, setCurrentFilters, selectedReducer, setCurrentTorrentId }: FiltersProps) {
     const config = useContext(ConfigContext);
     const serverConfig = useContext(ServerConfigContext);
     const [renderKey, forceRender] = useReducer((oldVal: number) => oldVal + 1, 0);
@@ -454,9 +548,10 @@ export const Filters = React.memo(function Filters({ torrents, currentFilters, s
         return flattenTree(tree);
     }, [pathsAndSizes, serverConfig.expandedDirFilters, config.values.interface.compactDirectories]);
 
-    const [labels, trackers] = useMemo(() => {
+    const [labels, trackers, errors] = useMemo(() => {
         const labels: Record<string, { count: number, size: number }> = {};
         const trackers: Record<string, { count: number, size: number }> = {};
+        const errors: Record<string, number> = {};
         config.values.interface.preconfiguredLabels.forEach((label) => {
             labels[label] = { count: 0, size: 0 };
         });
@@ -473,7 +568,14 @@ export const Filters = React.memo(function Filters({ torrents, currentFilters, s
             trackers[t.cachedMainTracker].size += t.sizeWhenDone;
         });
 
-        return [labels, trackers];
+        torrents.forEach((t) => {
+            if (t.cachedError != "") {
+                if (!(t.cachedError in errors)) errors[t.cachedError] = 0;
+                errors[t.cachedError] += 1;
+            }
+        });
+
+        return [labels, trackers, errors];
     }, [config, torrents]);
 
     const [sections, setSections] = useReducer(
@@ -486,6 +588,7 @@ export const Filters = React.memo(function Filters({ torrents, currentFilters, s
     const [compactDirectories, setCompactDirectories] = useState(config.values.interface.compactDirectories);
     const [recursiveDirectories, setRecursiveDirectories] = useState(config.values.interface.recursiveDirectories);
     const [showSizes, setShowSizes] = useState(config.values.interface.showSizesInFilters);
+    const [selectGroupOnDoubleClick, setSelectGroupOnDoubleClick] = useState(config.values.interface.selectFilterGroupOnDbClk);
 
     useEffect(() => {
         config.values.interface.filterSections = sections;
@@ -493,8 +596,9 @@ export const Filters = React.memo(function Filters({ torrents, currentFilters, s
         config.values.interface.compactDirectories = compactDirectories;
         config.values.interface.recursiveDirectories = recursiveDirectories;
         config.values.interface.showSizesInFilters = showSizes;
+        config.values.interface.selectFilterGroupOnDbClk = selectGroupOnDoubleClick;
         setSectionsMap(getSectionsMap(sections));
-    }, [config, sections, statusFiltersVisibility, compactDirectories, recursiveDirectories, showSizes]);
+    }, [config, sections, statusFiltersVisibility, compactDirectories, recursiveDirectories, showSizes, selectGroupOnDoubleClick]);
 
     const [info, setInfo, handler] = useContextMenu();
 
@@ -528,6 +632,19 @@ export const Filters = React.memo(function Filters({ torrents, currentFilters, s
         setShowSizes(!showSizes);
         forceRender();
     }, [showSizes, forceRender]);
+
+    const onSelectGroupOnDoubleClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        setSelectGroupOnDoubleClick(!selectGroupOnDoubleClick);
+    }, [selectGroupOnDoubleClick]);
+
+    const sharedRowProps = {
+        torrents,
+        currentFilters,
+        setCurrentFilters,
+        selectedReducer,
+        setCurrentTorrentId,
+    };
 
     return (
         <Flex
@@ -594,21 +711,57 @@ export const Filters = React.memo(function Filters({ torrents, currentFilters, s
                 >
                     {t("filters.showSizes")}
                 </Menu.Item>
+                <Menu.Item
+                    leftSection={selectGroupOnDoubleClick ? <Icon.Check size="1rem" /> : <Box miw="1rem" />}
+                    onClick={onSelectGroupOnDoubleClick}
+                >
+                    {t("filters.selectGroupOnDoubleClick")}
+                </Menu.Item>
             </MemoSectionsContextMenu>
             {sections[sectionsMap.Status].visible && <div style={{ order: sectionsMap.Status }}>
                 <Divider mx="sm" label={t("filters.sections.Status")} labelPosition="center" />
-                {statusFilters.map((f) =>
-                    (f.required === true || statusFiltersVisibility[f.name])
-                    && <FilterRow
+                {statusFilters.map((f) => {
+                    if (!(f.required === true || statusFiltersVisibility[f.name])) return null;
+                    if (f.name === "Stopped") {
+                        return <React.Fragment key={`status-${f.name}`}>
+                            <FilterRow
+                                id={`status-${f.name}`}
+                                filter={f}
+                                label={statusLabel(f.name)}
+                                stats={statCount(torrents.filter(f.filter))}
+                                {...sharedRowProps}
+                                showSizes={showSizes}
+                            />
+                            <FilterRow
+                                id="status-StoppedCompleted"
+                                filter={stoppedCompletedFilter}
+                                label={statusLabel("StoppedCompleted")}
+                                level={1}
+                                stats={statCount(torrents.filter(stoppedCompletedFilter.filter))}
+                                {...sharedRowProps}
+                                showSizes={showSizes}
+                            />
+                            <FilterRow
+                                id="status-StoppedIncomplete"
+                                filter={stoppedIncompleteFilter}
+                                label={statusLabel("StoppedIncomplete")}
+                                level={1}
+                                stats={statCount(torrents.filter(stoppedIncompleteFilter.filter))}
+                                {...sharedRowProps}
+                                showSizes={showSizes}
+                            />
+                        </React.Fragment>;
+                    }
+                    return <FilterRow
                         key={`status-${f.name}`}
                         id={`status-${f.name}`}
                         filter={f}
                         label={statusLabel(f.name)}
                         stats={statCount(torrents.filter(f.filter))}
-                        currentFilters={currentFilters}
-                        setCurrentFilters={setCurrentFilters}
+                        {...sharedRowProps}
                         showSizes={showSizes}
-                    />)}
+                    />;
+                })}
             </div>}
             {sections[sectionsMap.Directories].visible && <div style={{ order: sectionsMap.Directories }}>
                 <Divider
@@ -623,7 +776,7 @@ export const Filters = React.memo(function Filters({ torrents, currentFilters, s
                         id={`dir-${d.path}`}
                         dir={d}
                         expandedReducer={expandedReducer}
-                        {...{ torrents, currentFilters, setCurrentFilters }}
+                        {...sharedRowProps}
                         showSizes={showSizes}
                     />)}
             </div>}
@@ -639,8 +792,7 @@ export const Filters = React.memo(function Filters({ torrents, currentFilters, s
                     filter={noLabelsFilter}
                     label={t("filters.noLabels")}
                     stats={statCount(torrents.filter(noLabelsFilter.filter))}
-                    currentFilters={currentFilters}
-                    setCurrentFilters={setCurrentFilters}
+                    {...sharedRowProps}
                     showSizes={showSizes}
                 />
                 {Object.keys(labels).sort().map((label) =>
@@ -648,8 +800,7 @@ export const Filters = React.memo(function Filters({ torrents, currentFilters, s
                         key={`labels-${label}`}
                         label={label}
                         stats={labels[label]}
-                        currentFilters={currentFilters}
-                        setCurrentFilters={setCurrentFilters}
+                        {...sharedRowProps}
                         showSizes={showSizes}
                     />)}
             </div>}
@@ -665,8 +816,31 @@ export const Filters = React.memo(function Filters({ torrents, currentFilters, s
                         key={`trackers-${tracker}-${renderKey}`}
                         tracker={tracker}
                         stats={trackers[tracker]}
-                        currentFilters={currentFilters}
-                        setCurrentFilters={setCurrentFilters}
+                        {...sharedRowProps}
+                        showSizes={showSizes}
+                    />)}
+            </div>}
+            {sections[sectionsMap.Errors].visible && <div style={{ order: sectionsMap.Errors }}>
+                <Divider
+                    mx="sm"
+                    mt="md"
+                    label={t("filters.sections.Errors")}
+                    labelPosition="center"
+                />
+                <FilterRow
+                    id="noerrors"
+                    filter={noErrorsFilter}
+                    label={t("filters.noErrors")}
+                    stats={statCount(torrents.filter(noErrorsFilter.filter))}
+                    {...sharedRowProps}
+                    showSizes={showSizes}
+                />
+                {Object.keys(errors).sort().map((error) =>
+                    <ErrorFilterRow
+                        key={`errors-${error}`}
+                        error={error}
+                        stats={statCount(torrents.filter((t) => t.cachedError === error))}
+                        {...sharedRowProps}
                         showSizes={showSizes}
                     />)}
             </div>}

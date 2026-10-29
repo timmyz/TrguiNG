@@ -28,6 +28,8 @@ import { create, keyResolver } from "@yornaath/batshit";
 import { mergeTrackerLists } from "trutil";
 import { translate } from "../i18n/translate";
 
+const { TAURI } = await import(/* webpackChunkName: "taurishim" */"taurishim");
+
 const RUST_BACKEND = "http://127.0.0.1:44321";
 
 class ApiError extends Error { }
@@ -92,6 +94,14 @@ export class TransmissionClient {
         }
         if (toastNotificationSound) {
             this.headers["X-TrguiNG-sound"] = "true";
+        }
+        if (!TAURI && connection.url === "") {
+            // Web 版使用同源地址连接时，如果页面地址里带有 user:pass 形式的凭据，
+            // 浏览器会因为这些凭据产生跨域问题，这里重定向到不带凭据的地址
+            const url = new URL(document.documentURI);
+            if (url.username !== "" || url.password !== "") {
+                window.location.href = window.location.protocol + "//" + window.location.host;
+            }
         }
         if (connection.username !== "" || connection.password !== "") {
             const auth = "Basic " + Buffer.from(connection.username + ":" + connection.password, "utf-8").toString("base64");

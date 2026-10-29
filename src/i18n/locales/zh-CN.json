@@ -70,7 +70,6 @@
             "Directories": "数据目录",
             "Labels": "标签",
             "Trackers": "Tracker 分布",
-            "Servers": "服务器分布",
             "Errors": "错误分布"
         },
         "status": {

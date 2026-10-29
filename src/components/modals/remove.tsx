@@ -23,14 +23,51 @@ import { HkModal, TorrentsNames } from "./common";
 import React, { useCallback, useContext, useEffect, useState } from "react";
 import { useRemoveTorrents } from "queries";
 import { notifications } from "@mantine/notifications";
-import { useServerSelectedTorrents } from "rpc/torrent";
+import type { Torrent } from "rpc/torrent";
+import { useServerSelectedTorrents, useServerTorrentData } from "rpc/torrent";
 import { ConfigContext } from "config";
+import { ensurePathDelimiter, fileSystemSafeName } from "trutil";
+
+function torrentDataPath(torrent: Torrent) {
+    return ensurePathDelimiter(torrent.downloadDir) + fileSystemSafeName(torrent.name);
+}
+
+// Splits the selected torrents into those whose data can be safely deleted
+// (no other torrent uses the same data path) and those that have to keep their data.
+function splitSelectedByDataUsage(torrents: Torrent[], selected: Set<number>) {
+    const selectedTorrents = torrents.filter((torrent) => selected.has(torrent.id));
+
+    const pathUsage = new Map<string, number>();
+    selectedTorrents.forEach((torrent) => pathUsage.set(torrentDataPath(torrent), 0));
+    torrents.forEach((torrent) => {
+        const count = pathUsage.get(torrentDataPath(torrent));
+        if (count !== undefined) pathUsage.set(torrentDataPath(torrent), count + 1);
+    });
+    selectedTorrents.forEach((torrent) => {
+        const count = pathUsage.get(torrentDataPath(torrent));
+        if (count !== undefined) pathUsage.set(torrentDataPath(torrent), count - 1);
+    });
+
+    const deleteDataIds: number[] = [];
+    const keepDataIds: number[] = [];
+    selectedTorrents.forEach((torrent) => {
+        const count = pathUsage.get(torrentDataPath(torrent)) ?? 0;
+        if (count === 0) {
+            deleteDataIds.push(torrent.id);
+        } else {
+            keepDataIds.push(torrent.id);
+        }
+    });
+    return { deleteDataIds, keepDataIds };
+}
 
 export function RemoveModal(props: ModalState) {
     const { t } = useTranslation();
     const config = useContext(ConfigContext);
     const serverSelected = useServerSelectedTorrents();
+    const serverData = useServerTorrentData();
     const [deleteData, setDeleteData] = useState<boolean>(false);
+    const [deleteDataWhenOne, setDeleteDataWhenOne] = useState<boolean>(false);
 
     useEffect(() => {
         if (props.opened) {
@@ -39,35 +76,72 @@ export function RemoveModal(props: ModalState) {
             } else {
                 setDeleteData(config.values.interface.deleteTorrentDataSelection);
             }
+            setDeleteDataWhenOne(config.values.interface.deleteTorrentDataWhenOneSelection);
         }
     }, [config, props.opened]);
 
     const onDeleteDataChanged = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.currentTarget.checked;
+        if (value) {
+            setDeleteDataWhenOne(false);
+            config.values.interface.deleteTorrentDataWhenOneSelection = false;
+        }
         setDeleteData(value);
         config.values.interface.deleteTorrentDataSelection = value;
     }, [config]);
 
+    const onDeleteDataWhenOneChanged = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.currentTarget.checked;
+        if (value) {
+            setDeleteData(false);
+            config.values.interface.deleteTorrentDataSelection = false;
+        }
+        setDeleteDataWhenOne(value);
+        config.values.interface.deleteTorrentDataWhenOneSelection = value;
+    }, [config]);
+
     const remove = useRemoveTorrents();
 
+    const onRemoveError = useCallback((e: unknown) => {
+        console.error("Error removing torrents", e);
+        notifications.show({
+            message: t("remove.errorRemoving"),
+            color: "red",
+        });
+    }, [t]);
+
     const onDelete = useCallback(() => {
-        remove(
-            {
-                torrentIds: Array.from(serverSelected),
-                deleteData,
-            },
-            {
-                onError: (e) => {
-                    console.error("Error removing torrents", e);
-                    notifications.show({
-                        message: t("remove.errorRemoving"),
-                        color: "red",
-                    });
+        if (deleteDataWhenOne) {
+            const { deleteDataIds, keepDataIds } = splitSelectedByDataUsage(serverData.torrents, serverSelected);
+            if (keepDataIds.length > 0) {
+                remove(
+                    {
+                        torrentIds: keepDataIds,
+                        deleteData: false,
+                    },
+                    { onError: onRemoveError },
+                );
+            }
+            if (deleteDataIds.length > 0) {
+                remove(
+                    {
+                        torrentIds: deleteDataIds,
+                        deleteData: true,
+                    },
+                    { onError: onRemoveError },
+                );
+            }
+        } else {
+            remove(
+                {
+                    torrentIds: Array.from(serverSelected),
+                    deleteData,
                 },
-            },
-        );
+                { onError: onRemoveError },
+            );
+        }
         props.close();
-    }, [remove, serverSelected, deleteData, props, t]);
+    }, [remove, serverData, serverSelected, deleteData, deleteDataWhenOne, onRemoveError, props]);
 
     return (
         <HkModal
@@ -86,6 +160,12 @@ export function RemoveModal(props: ModalState) {
                 onChange={onDeleteDataChanged}
                 my="xl"
             />
+            <Checkbox
+                label={t("remove.deleteDataWhenOneSelection")}
+                checked={deleteDataWhenOne}
+                onChange={onDeleteDataWhenOneChanged}
+                my="xl"
+            />
             <Divider my="sm" />
             <Group justify="center" gap="md">
                 <Button
@@ -94,7 +174,7 @@ export function RemoveModal(props: ModalState) {
                     color="red"
                     data-autofocus
                 >
-                    {deleteData ? t("remove.delete") : t("remove.remove")}
+                    {deleteData || deleteDataWhenOne ? t("remove.delete") : t("remove.remove")}
                 </Button>
                 <Button onClick={props.close} variant="light">{t("remove.cancel")}</Button>
             </Group>

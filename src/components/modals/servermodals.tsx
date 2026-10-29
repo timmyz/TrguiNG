@@ -68,6 +68,23 @@ if (urlAddParam != null && urlAddParam !== "") {
     window.history.pushState("", "", newUrl.toString());
 }
 
+function isMagnetUri(item: string | File): boolean {
+    return typeof item === "string" && item.startsWith("magnet:?");
+}
+
+// 取队列头部连续的同类项作为一批，交给同一个弹窗批量处理
+function takeBatch(queue: Array<string | File>): Array<string | File> {
+    if (queue.length === 0) return [];
+
+    const magnet = isMagnetUri(queue[0]);
+    const batch = [queue[0]];
+    for (let i = 1; i < queue.length; i++) {
+        if (isMagnetUri(queue[i]) !== magnet) break;
+        batch.push(queue[i]);
+    }
+    return batch;
+}
+
 const ServerModals = React.forwardRef<ModalCallbacks, ServerModalsProps>(function ServerModals(props, ref) {
     const [showAddMagnetModal, { open: openAddMagnetModal, close: closeAddMagnetModal }] = useDisclosure(false);
     const [showAddTorrentModal, { open: openAddTorrentModal, close: closeAddTorrentModal }] = useDisclosure(false);
@@ -90,10 +107,9 @@ const ServerModals = React.forwardRef<ModalCallbacks, ServerModalsProps>(functio
         editTorrent: openEditTorrentModal,
     }));
 
-    const [magnetLink, setMagnetLink] = useState<string>();
-    const [torrent, setTorrent] = useState<string | File>();
-
     const [addQueue, setAddQueue] = useState<Array<string | File>>(urlAddParam != null ? [urlAddParam] : []);
+    // 当前交给弹窗批量处理的一批种子文件/磁力链接
+    const [activeUris, setActiveUris] = useState<Array<string | File>>([]);
 
     const enqueue = useCallback((paths: string[] | File[]) => {
         setAddQueue((queue) => [...queue, ...paths]);
@@ -157,38 +173,33 @@ const ServerModals = React.forwardRef<ModalCallbacks, ServerModalsProps>(functio
 
     useEffect(() => {
         if (addQueue.length > 0 && !showAddMagnetModal && !showAddTorrentModal) {
-            const item = addQueue[0];
-            if (typeof item === "string" && item.startsWith("magnet:?")) {
-                setMagnetLink(item);
+            // 一次只打开一个弹窗，弹窗内批量处理这一批文件
+            const batch = takeBatch(addQueue);
+            setActiveUris(batch);
+            if (isMagnetUri(batch[0])) {
                 openAddMagnetModal();
             } else {
-                setTorrent(item);
                 openAddTorrentModal();
             }
         }
-    }, [addQueue, showAddMagnetModal, showAddTorrentModal, setMagnetLink, setTorrent, openAddMagnetModal, openAddTorrentModal]);
+    }, [addQueue, showAddMagnetModal, showAddTorrentModal, openAddMagnetModal, openAddTorrentModal]);
+
+    // 弹窗关闭后把已处理的一批从队列中移除，再处理下一批
+    const popBatch = useCallback(() => {
+        const count = activeUris.length;
+        setActiveUris([]);
+        setAddQueue((queue) => queue.slice(count));
+    }, [activeUris]);
 
     const closeAddMagnetModalAndPop = useCallback(() => {
         closeAddMagnetModal();
-        if (magnetLink !== undefined && addQueue.length > 0 && addQueue[0] === magnetLink) {
-            setMagnetLink(undefined);
-            setAddQueue(addQueue.slice(1));
-        } else if (addQueue.length > 0) {
-            // kick the queue again
-            setAddQueue([...addQueue]);
-        }
-    }, [closeAddMagnetModal, addQueue, magnetLink]);
+        popBatch();
+    }, [closeAddMagnetModal, popBatch]);
 
     const closeAddTorrentModalAndPop = useCallback(() => {
         closeAddTorrentModal();
-        if (torrent !== undefined && addQueue.length > 0 && addQueue[0] === torrent) {
-            setTorrent(undefined);
-            setAddQueue(addQueue.slice(1));
-        } else if (addQueue.length > 0) {
-            // kick the queue again
-            setAddQueue([...addQueue]);
-        }
-    }, [closeAddTorrentModal, addQueue, torrent]);
+        popBatch();
+    }, [closeAddTorrentModal, popBatch]);
 
     return <>
         <EditLabelsModal opened={showLabelsModal} close={closeLabelsModal} />
@@ -196,14 +207,14 @@ const ServerModals = React.forwardRef<ModalCallbacks, ServerModalsProps>(functio
         <MoveModal opened={showMoveModal} close={closeMoveModal} />
         <AddMagnet
             serverName={props.serverName}
-            uri={magnetLink}
+            uris={activeUris}
             tabsRef={props.tabsRef}
             opened={showAddMagnetModal}
             close={closeAddMagnetModalAndPop}
         />
         <AddTorrent
             serverName={props.serverName}
-            uri={torrent}
+            uris={activeUris}
             tabsRef={props.tabsRef}
             opened={showAddTorrentModal}
             close={closeAddTorrentModalAndPop}

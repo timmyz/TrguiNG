@@ -1,117 +1,122 @@
-# TrguiNG
-**Remote GUI for Transmission torrent daemon**
+# TrguiNG 汉化版（基于 openscopeproject/TrguiNG）
 
-![GitHub release](https://img.shields.io/github/v/release/OpenScopeProject/TrguiNG)
-![Downloads](https://img.shields.io/github/downloads/OpenScopeProject/TrguiNG/total)
-![Lint status](https://img.shields.io/github/actions/workflow/status/OpenScopeProject/TrguiNG/lint.yml?label=Lint&event=push)
+**Remote GUI for Transmission torrent daemon —— 中文版**
 
-![logo](https://i.imgur.com/QdgMWwW.png)
+> 本仓库基于 [openscopeproject/TrguiNG](https://github.com/openscopeproject/TrguiNG) 同步开发，
+> 在上游功能基础上提供**简体中文界面**与若干实用增强功能。
 
-`TrguiNG` is a rewrite of [transgui](https://github.com/transmission-remote-gui/transgui)
-project using [tauri](https://tauri.app).
-Frontend is written in typescript with [react.js](https://react.dev/) and
-[mantine](https://mantine.dev/) library. Backend for the app is written in
-[rust](https://www.rust-lang.org/).
+---
 
-You can use this program in 2 ways: as a native Windows/Linux/Mac app and as a web gui
-served by transmission itself by setting `$TRANSMISSION_WEB_HOME` environment variable
-to point to TrguiNG web assets.
+## 当前版本
 
-There are screenshots of the app available on the
-[project wiki](https://github.com/openscopeproject/TrguiNG/wiki).
+| 项目 | 版本 |
+|---|---|
+| 上游基线 | **v1.5.1**（`611f8d8`，2026-10-26） |
+| i18n 框架 | 合并自上游 PR [#339](https://github.com/openscopeproject/TrguiNG/pull/339)（ManuZhu0728） |
+| Tauri | v2.12 |
+| Mantine | v8 |
+| 界面语言 | 简体中文（`zh-CN`），支持英文 / 俄语回退 |
 
-Some differentiating features:
+---
 
-* Multi tabbed interface for concurrent server connections (native app only)
-* Torrent creation with fast multi threaded hashing (native app only)
-* Powerful torrent filtering options
-* Latest transmission features support: labels, bandwidth groups, sequential download
-* Dark and white theme
+## 汉化方式：从硬编码改为 i18n 架构
 
-Planned:
-
-* Better bandwidth groups support when API is ready (https://github.com/transmission/transmission/issues/5455)
-
-Transmission v2.40 or later is required.
-
-## Downloads
-
-You can get the latest release from the
-[releases page](https://github.com/openscopeproject/TrguiNG/releases).
-
-Weekly builds of current development version are available from github
-[build workflows](https://github.com/openscopeproject/TrguiNG/actions/workflows/build.yml).
-Pick the latest successful run and scroll down to the artifacts section.
-
-## Compiling
-
-Prerequisites:
-- [Node.js 20](https://nodejs.org/) or later
-- [rust 1.92](https://www.rust-lang.org/) or later
-- Geoip lookup database in mmdb format, put it in `src-tauri`
-   ```
-   wget -nv -O src-tauri/dbip.mmdb "https://github.com/openscopeproject/TrguiNG/releases/latest/download/dbip.mmdb"
-   ```
-   You can get latest db from [db-ip.com](https://db-ip.com/db/download/ip-to-country-lite).
-
-To compile simply run
+旧版本把中文直接硬编码在 `.tsx` 里，导致每次同步上游都要重新逐处贴回约 600 条文案。
+本版改为上游认可的 **i18n 架构**：
 
 ```
-$ npm install
-$ npm run build
+src/i18n/
+├── index.ts              # i18next 实例与初始化
+├── language.ts           # 语言注册表（不引入 i18next，保证启动包体积）
+├── translate.ts          # 核心模块用的翻译器注入
+├── locales/
+│   ├── en.json           # 英文基准（key 的唯一来源）
+│   ├── zh-CN.json        # 简体中文
+│   └── ru.json           # 俄语（上游提供）
+└── README.md             # 新增语言的注册说明
+src-tauri/src/i18n.rs     # Rust 端，与前端共用同一份 JSON 资源
 ```
 
-This will generate optimized bundle in `dist` and a release binary in `src-tauri/target/release` folder.
-Also installer package will be available in `src-tauri/target/release/bundle/...`.
+**带来的直接收益：**
 
-The binary is statically linked and embeds all necessary assets except for the geoip database.
-It is completely self sufficient and can be used as a portable executable but for geoip lookup to work you
-need to install the app with provided installer.
+- 同步上游时**不再产生文案冲突**，只需增量补充新增 key
+- 托盘菜单、macOS 菜单、通知标题等原生界面也走同一套翻译
+- 语言可自动识别（`zh` / `zh-CN` 均可匹配），也可在界面设置里手动指定
+- 英文为兜底语言，缺失的词条自动回退，不会出现空白
 
-For development run in parallel
+新增语言只需三步：放入 `locales/<code>.json` → 在 `language.ts` 注册 → 在 Rust 的 `define_languages!` 宏注册。
 
-```
-$ npm run webpack-serve
-$ npm run tauri-dev
-```
+---
 
-Webpack will automatically watch changes in `src/` and refresh the app view, tauri will watch changes
-in `src-tauri/` and rebuild/restart the app as needed.
+## 自研增强功能
 
-## How to use TrguiNG as a web interface
+以下功能为上游没有、本仓库独有的：
 
-Transmission supports custom web interfaces, all you have to do is run the daemon with
-`$TRANSMISSION_WEB_HOME` variable pointing to the web assets that transmissinon will serve
-over it's `.../transmission/web/` endpoint.
+| 功能 | 位置 | 说明 |
+|---|---|---|
+| **暂停子状态** | 过滤面板 | 「已暂停」下分出「已完成 / 未完成」两级子过滤器 |
+| **批量开始 / 暂停** | 工具栏 | 一键开始全部、开始已完成的、暂停全部、暂停出错的、暂停下载中的 |
+| **错误分布分组** | 过滤面板 | 按 `cachedError` 聚合，新增「错误分布」分组与「无错误」汇总行 |
+| **目录分组复制路径** | 过滤面板 | 目录行右侧一键复制路径 |
+| **双击全选分组** | 过滤面板 | 双击分组行即选中该分组全部种子（可在右键菜单开关） |
+| **隐藏 / 展示运行状态** | 界面右下 | 常驻状态面板，显示运行中的操作与当前选中项 |
+| **复制名称 / 路径** | 种子列表右键 | 批量复制选中项的名称或完整路径（自动去重） |
+| **单选也删数据** | 删除弹窗 | 只选中一个种子时也可删除其数据，且会自动避开其他种子共享的路径 |
+| **tr3 批量改 Tracker** | 种子列表右键 | 在 transmission 4.0 以下也允许对多个选中种子批量修改 Tracker |
+| **拖拽批量添加** | 添加种子 | 一次拖入多个种子文件时逐个处理，而非只处理第一个 |
+| **磁力链接下载间隔** | 添加种子 | 批量添加磁力链接时可设置间隔秒数 |
 
-Example steps for debian:
-1. Download latest `trguing-web-xxxx.zip` zip from [releases](https://github.com/openscopeproject/TrguiNG/releases)
-   page.
-2. Unpack it anywhere, make sure that the user transmission runs under (by default `debian-transmission`)
-   has read permissions.
-3. Edit transmission daemon systemd unit file `/etc/systemd/system/multi-user.target.wants/transmission-daemon.service`
-   and add following to `[Service]` section:
+### 与上游重复、已改用上游实现的部分
+
+| 旧版实现 | 现采用 |
+|---|---|
+| 列表不显示子目录种子 | 上游 `recursiveDirectories`（语义等价，默认递归） |
+| 显示分组体积 | 上游 `showSizesInFilters`（覆盖面更广） |
+| 字体大小设置 | 上游 `fontSize` / `fontSizeBase` |
+| TB / EB 体积单位 | 上游大 SI 单位支持 |
+| 进度条静态/动态/多颜色 | 上游 `animatedProgressbars` + `colorfulProgressbars` |
+
+### 旧配置迁移
+
+汉化版旧配置里的分组名是中文（`种子状态` / `数据目录` / `用户标签` / `服务器分布` / `错误分布` …），
+与新架构的英文 key 不兼容。`src/config.ts` 中的 `migrateLegacySectionNames()` 会在加载时自动映射，
+**存量用户升级后不会丢失分组可见性设置**。
+
+---
+
+## 部署（Docker / Web 版）
+
+1. 从 [releases](https://github.com/jayzcoder/TrguiNG/releases) 下载 `trguing-web-<version>-zh.zip`
+2. 解压到目标目录，确保 `index.html` 位于该目录**第一层**
+3. 设置 transmission 环境变量：
    ```
-   Environment=TRANSMISSION_WEB_HOME=/path/to/extracted/trguing/zip
+   TRANSMISSION_WEB_HOME=/config/webui/trguing-zh
    ```
-4. Reload the unit file with `sudo systemctl daemon-reload`
-   and restart the service `sudo systemctl restart transmission-daemon`
+4. 重启 transmission 服务
 
-> [!NOTE]
-> On systems that use software such as [AppArmor](https://en.wikipedia.org/wiki/AppArmor) or [SELinux](https://en.wikipedia.org/wiki/SELinux), you may need to extend the existing `transmission-daemon` security profile or add a new one so the Transmission daemon can read the TrguiNG asset files.
->
-> An example with AppArmor on Ubuntu Server is below:
-> ```
-> # /etc/apparmor.d/local/transmission-daemon
->
-> /path/to/extracted/trguing/zip/ r,
-> /path/to/extracted/trguing/zip/** r,
-> ```
->
-> Then reload the Transmission configuration:
-> ```
-> apparmor_parser -r /etc/apparmor.d/transmission
-> ```
+> 使用 AppArmor / SELinux 的系统还需放行该目录的读取权限，详见上游 README。
+
+---
+
+## 本地构建
+
+前置：Node.js 20+（桌面端另需 Rust 1.92+）
+
+```bash
+npm ci
+npm run webpack-prod     # 仅构建 Web 产物，输出到 dist/
+npm run tauri-dev        # 桌面端开发模式
+```
+
+或直接用封装好的 Web 发布脚本（构建 + 打包 zip）：
+
+```bash
+ci/build_web_zh.sh
+VERSION=1.5.1 ci/build_web_zh.sh   # 指定版本号
+```
+
+---
 
 ## License
-Project is distributed under GNU Affero General Public License v3, see `LICENSE.txt` for details.
+
+遵循上游的 GNU Affero General Public License v3，详见 `LICENSE.txt`。

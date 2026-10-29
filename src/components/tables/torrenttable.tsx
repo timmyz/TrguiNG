@@ -23,7 +23,7 @@ import { useServerTorrentData, useServerRpcVersion, useServerSelectedTorrents } 
 import type { TorrentAllFieldsType, TorrentFieldsType } from "rpc/transmission";
 import { PriorityColors, PriorityStrings, Status, StatusStrings, TorrentMinimumFields } from "rpc/transmission";
 import type { ColumnDef, VisibilityState } from "@tanstack/react-table";
-import { bytesToHumanReadableStr, fileSystemSafeName, modKeyString, pathMapFromServer, secondsToHumanReadableStr, timestampToDateString, torrentProgressbarStyle } from "trutil";
+import { bytesToHumanReadableStr, ensurePathDelimiter, fileSystemSafeName, modKeyString, pathMapFromServer, secondsToHumanReadableStr, timestampToDateString, torrentProgressbarStyle } from "trutil";
 import { ProgressBar } from "../progressbar";
 import type { AccessorFn, CellContext } from "@tanstack/table-core";
 import type { TableSelectReducer } from "./common";
@@ -562,7 +562,6 @@ function TorrentContextMenu(props: {
     const { t } = useTranslation();
     const serverData = useServerTorrentData();
     const serverSelected = useServerSelectedTorrents();
-    const rpcVersion = useServerRpcVersion();
 
     const { onRowDoubleClick } = props;
     const onOpen = useCallback((reveal: boolean) => {
@@ -589,6 +588,43 @@ function TorrentContextMenu(props: {
             },
         );
     }, [mutate, serverSelected]);
+
+    const copyNames = useCallback(() => {
+        if (serverSelected.size === 0) return;
+
+        const names = new Map<string, number>();
+        serverData.torrents.forEach((t) => {
+            if (serverSelected.has(t.id) && !names.has(t.name)) {
+                names.set(t.name, 0);
+            }
+        });
+
+        copyToClipboard(Array.from(names.keys()).join("\n"));
+
+        notifications.show({
+            message: t("torrents.notifications.nameCopied"),
+            color: "green",
+        });
+    }, [serverData.torrents, serverSelected, t]);
+
+    const copyPaths = useCallback(() => {
+        if (serverSelected.size === 0) return;
+
+        const paths = new Map<string, number>();
+        serverData.torrents.forEach((t) => {
+            if (serverSelected.has(t.id)) {
+                const path = ensurePathDelimiter(t.downloadDir) + fileSystemSafeName(t.name);
+                if (!paths.has(path)) paths.set(path, 0);
+            }
+        });
+
+        copyToClipboard(Array.from(paths.keys()).join("\n"));
+
+        notifications.show({
+            message: t("torrents.notifications.pathCopied"),
+            color: "green",
+        });
+    }, [serverData.torrents, serverSelected, t]);
 
     const copyMagnetLinks = useCallback(() => {
         if (serverSelected.size === 0) return;
@@ -683,6 +719,20 @@ function TorrentContextMenu(props: {
                 >
                     {serverSelected.size > 1 ? t("torrents.menu.copyMagnetMulti") : t("torrents.menu.copyMagnetSingle")}
                 </Menu.Item>
+                <Menu.Item
+                    onClick={copyNames}
+                    leftSection={<Icon.ClipboardFill size="1.1rem" />}
+                    disabled={serverSelected.size === 0}
+                >
+                    {t("torrents.menu.copyName")}
+                </Menu.Item>
+                <Menu.Item
+                    onClick={copyPaths}
+                    leftSection={<Icon.FolderFill size="1.1rem" />}
+                    disabled={serverSelected.size === 0}
+                >
+                    {t("torrents.menu.copyPath")}
+                </Menu.Item>
                 <Menu.Sub openDelay={120} closeDelay={150}>
                     <Menu.Sub.Target>
                         <Menu.Sub.Item
@@ -750,7 +800,7 @@ function TorrentContextMenu(props: {
                 <Menu.Item
                     onClick={() => props.modals.current?.editTrackers()}
                     leftSection={<Icon.Wifi size="1.1rem" />}
-                    disabled={serverSelected.size === 0 || (serverSelected.size > 1 && rpcVersion < 17)}
+                    disabled={serverSelected.size === 0}
                 >
                     {t("torrents.menu.trackers")}
                 </Menu.Item>
