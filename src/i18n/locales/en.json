@@ -37,7 +37,13 @@
             "errorImportingSettings": "Error importing settings"
         },
         "createTorrentWithHotkey": "Create new torrent file ({{hotkey}} + T)",
-        "createTorrent": "Create torrent"
+        "createTorrent": "Create torrent",
+        "startAllTorrents": "Start all torrents",
+        "startCompletedTorrents": "Start completed torrents",
+        "pauseAllTorrents": "Pause all torrents",
+        "pauseErrorTorrents": "Pause torrents with errors",
+        "pauseDownloadingTorrents": "Pause downloading torrents",
+        "toggleRunStatus": "Toggle run status"
     },
     "statusbar": {
         "showGlobalSpeeds": "Show global speeds",
@@ -63,7 +69,9 @@
             "Status": "Status",
             "Directories": "Directories",
             "Labels": "Labels",
-            "Trackers": "Trackers"
+            "Trackers": "Trackers",
+            "Servers": "Servers",
+            "Errors": "Errors"
         },
         "status": {
             "All Torrents": "All Torrents",
@@ -75,13 +83,19 @@
             "Stopped": "Stopped",
             "Error": "Error",
             "Waiting": "Waiting",
-            "Magnetizing": "Magnetizing"
+            "Magnetizing": "Magnetizing",
+            "StoppedCompleted": "Completed (stopped)",
+            "StoppedIncomplete": "Incomplete (stopped)"
         },
         "noLabels": "<No labels>",
         "statusFiltersSubmenu": "Status filters",
         "compactDirectories": "Compact Directories",
         "recursiveDirectories": "Recursive Directories",
-        "showSizes": "Show sizes"
+        "showSizes": "Show sizes",
+        "noErrors": "<No errors>",
+        "copyPath": "Copy path",
+        "pathCopied": "Path copied to clipboard",
+        "selectGroupOnDoubleClick": "Select group contents on double click"
     },
     "tables": {
         "rename": "Rename (F2)",
@@ -223,7 +237,9 @@
             "torrentsReannounced": "Torrents are reannounced",
             "torrentsQueueUpdated": "Torrents queue updated",
             "magnetCopiedSingle": "Magnet link copied to clipboard",
-            "magnetCopiedMulti": "Magnet links copied to clipboard"
+            "magnetCopiedMulti": "Magnet links copied to clipboard",
+            "nameCopied": "Name copied to clipboard",
+            "pathCopied": "Path copied to clipboard"
         },
         "menu": {
             "open": "Open",
@@ -244,7 +260,9 @@
             "setLabels": "Set labels...",
             "remove": "Remove...",
             "trackers": "Trackers...",
-            "properties": "Properties..."
+            "properties": "Properties...",
+            "copyName": "Copy name",
+            "copyPath": "Copy path"
         }
     },
     "modals": {
@@ -585,7 +603,9 @@
         "timeFormats": {
             "12h": "12-hour",
             "24h": "24-hour"
-        }
+        },
+        "selectFilterGroupOnDbClk": "Select group contents on double click",
+        "showRunStatus": "Show run status"
     },
     "server": {
         "error": {
@@ -609,7 +629,8 @@
         "delete": "Delete",
         "remove": "Remove",
         "cancel": "Cancel",
-        "errorRemoving": "Error removing torrents"
+        "errorRemoving": "Error removing torrents",
+        "deleteDataWhenOneSelection": "Delete data when a single torrent is selected"
     },
     "editLabels": {
         "canNotSetLabels": "Can not set labels",
@@ -695,5 +716,10 @@
         "hide": "Hide",
         "quit": "Quit",
         "minimize": "Minimize"
+    },
+    "runStatus": {
+        "idle": "Idle",
+        "selectedTorrent": "Selected torrent",
+        "noSelection": "No torrent selected"
     }
 }

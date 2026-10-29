@@ -70,7 +70,7 @@ export type TableName = typeof TableNames[number];
 
 export type SplitType = "vertical" | "horizontal";
 
-const FilterSections = ["Status", "Directories", "Labels", "Trackers"] as const;
+const FilterSections = ["Status", "Directories", "Labels", "Trackers", "Servers", "Errors"] as const;
 export type FilterSectionName = typeof FilterSections[number];
 
 const StatusFilters = [
@@ -93,6 +93,68 @@ export type SectionsVisibility<S extends string> = Array<{
     section: S,
     visible: boolean,
 }>;
+
+// Section and filter names used by the pre-i18n Chinese build. They are mapped
+// to the current identifiers so that settings saved by older versions keep
+// working after the switch to the i18n layout.
+const LegacyFilterSectionNames: Record<string, string> = {
+    "种子状态": "Status",
+    "数据目录": "Directories",
+    "用户标签": "Labels",
+    "服务器分布": "Servers",
+    "错误分布": "Errors",
+};
+
+const LegacyStatusFilterNames: Record<string, string> = {
+    "全部": "All Torrents",
+    "下载中": "Downloading",
+    "已暂停": "Stopped",
+    "已完成": "Completed",
+    "正在校验": "Waiting",
+    "活动中": "Active",
+    "未活动": "Inactive",
+    "工作中": "Running",
+    "错误": "Error",
+    "磁力链接": "Magnetizing",
+};
+
+const LegacyStatusbarSectionNames: Record<string, string> = {
+    "连接状态": "Connection",
+    "下载速度": "Download speed ",
+    "上传速度": "Upload speed",
+    "剩余空间": "Free space",
+    "列表总大小": "Total",
+    "选中大小": "Selected",
+};
+
+const LegacyDetailsSectionNames: Record<string, string> = {
+    "常规": "General",
+    "文件": "Files",
+    "块": "Pieces",
+    "用户": "Peers",
+    "Tracker": "Trackers",
+    "分割": "<spacer>",
+    "数据统计": "Server statistics",
+};
+
+function migrateLegacySectionNames(values: Settings) {
+    const rename = <S extends string>(sections: SectionsVisibility<S>, legacy: Record<string, string>) => sections.map((section) => ({
+        section: (legacy[section.section] ?? section.section) as S,
+        visible: section.visible,
+    }));
+    values.interface.filterSections = rename(values.interface.filterSections, LegacyFilterSectionNames);
+    values.interface.statusBarSections = rename(values.interface.statusBarSections, LegacyStatusbarSectionNames);
+    values.interface.detailsTabs = rename(values.interface.detailsTabs, LegacyDetailsSectionNames);
+
+    const statusFilters = values.interface.statusFiltersVisibility as unknown as Record<string, boolean>;
+    for (const [legacy, current] of Object.entries(LegacyStatusFilterNames)) {
+        if (legacy in statusFilters) {
+            statusFilters[current] = statusFilters[legacy];
+            delete statusFilters[legacy];
+        }
+    }
+    values.interface.statusFiltersVisibility = statusFilters as unknown as StatusFiltersVisibility;
+}
 
 export const WindowMinimizeOptions = ["minimize", "hide"] as const;
 export const WindowCloseOptions = ["hide", "close", "quit"] as const;
@@ -165,10 +227,12 @@ interface Settings {
         compactDirectories: boolean,
         recursiveDirectories: boolean,
         showSizesInFilters: boolean,
+        selectFilterGroupOnDbClk: boolean,
         statusBarSections: SectionsVisibility<StatusbarSectionName>,
         statusBarGlobalSpeeds: boolean,
         showFiltersPanel: boolean,
         showDetailsPanel: boolean,
+        showRunStatus: boolean,
         detailsTabs: SectionsVisibility<DetailsSectionsName>,
         showFilesSearchBox: boolean,
         flatFileTree: boolean,
@@ -181,6 +245,7 @@ interface Settings {
         addTorrentPrioritySelection: PriorityNumberType, // normal priority
         deleteTorrentData: DeleteTorrentDataOption,
         deleteTorrentDataSelection: boolean,
+        deleteTorrentDataWhenOneSelection: boolean,
         numLastSaveDirs: number,
         sortLastSaveDirs: boolean,
         preconfiguredLabels: string[],
@@ -295,6 +360,7 @@ const DefaultSettings: Settings = {
         compactDirectories: false,
         recursiveDirectories: true,
         showSizesInFilters: true,
+        selectFilterGroupOnDbClk: false,
         statusBarSections: StatusbarSections.map((section) => ({
             section,
             visible: true,
@@ -302,6 +368,7 @@ const DefaultSettings: Settings = {
         statusBarGlobalSpeeds: false,
         showFiltersPanel: true,
         showDetailsPanel: true,
+        showRunStatus: true,
         detailsTabs: DetailsSections.map((section) => ({
             section,
             visible: true,
@@ -317,6 +384,7 @@ const DefaultSettings: Settings = {
         addTorrentPrioritySelection: 0, // normal priority
         deleteTorrentData: "default off",
         deleteTorrentDataSelection: false,
+        deleteTorrentDataWhenOneSelection: false,
         numLastSaveDirs: 20,
         sortLastSaveDirs: false,
         preconfiguredLabels: [],
@@ -367,6 +435,7 @@ export class Config {
                 this.values.interface.colorfulProgressbars = this.values.interface.progressbarStyle === "colorful";
                 this.values.interface.progressbarStyle = undefined;
             }
+            migrateLegacySectionNames(this.values);
         } catch (e) {
             console.log(e);
         }

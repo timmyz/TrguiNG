@@ -37,7 +37,13 @@
             "errorImportingSettings": "导入设置时出错"
         },
         "createTorrentWithHotkey": "创建新的种子文件（{{hotkey}} + T）",
-        "createTorrent": "创建种子"
+        "createTorrent": "创建种子",
+        "startAllTorrents": "开始所有种子",
+        "startCompletedTorrents": "开始已完成的种子",
+        "pauseAllTorrents": "暂停所有种子",
+        "pauseErrorTorrents": "暂停错误的种子",
+        "pauseDownloadingTorrents": "暂停下载中的种子",
+        "toggleRunStatus": "隐藏/展示运行状态"
     },
     "statusbar": {
         "showGlobalSpeeds": "显示全局速度",
@@ -63,7 +69,9 @@
             "Status": "状态",
             "Directories": "数据目录",
             "Labels": "标签",
-            "Trackers": "Tracker 分布"
+            "Trackers": "Tracker 分布",
+            "Servers": "服务器分布",
+            "Errors": "错误分布"
         },
         "status": {
             "All Torrents": "所有种子",
@@ -75,13 +83,19 @@
             "Stopped": "已暂停",
             "Error": "错误",
             "Waiting": "等待中",
-            "Magnetizing": "磁力转换中"
+            "Magnetizing": "磁力转换中",
+            "StoppedCompleted": "已完成（已暂停）",
+            "StoppedIncomplete": "未完成（已暂停）"
         },
         "noLabels": "<无标签>",
         "statusFiltersSubmenu": "状态筛选",
         "compactDirectories": "紧凑目录",
         "recursiveDirectories": "递归目录",
-        "showSizes": "显示分组体积"
+        "showSizes": "显示分组体积",
+        "noErrors": "<无错误>",
+        "copyPath": "复制路径",
+        "pathCopied": "路径已复制到剪贴板",
+        "selectGroupOnDoubleClick": "双击全选分组"
     },
     "tables": {
         "rename": "重命名 (F2)",
@@ -223,7 +237,9 @@
             "torrentsReannounced": "种子已重新汇报",
             "torrentsQueueUpdated": "种子队列已更新",
             "magnetCopiedSingle": "磁力链接已复制到剪贴板",
-            "magnetCopiedMulti": "磁力链接已复制到剪贴板"
+            "magnetCopiedMulti": "磁力链接已复制到剪贴板",
+            "nameCopied": "名称已复制到剪贴板",
+            "pathCopied": "路径已复制到剪贴板"
         },
         "menu": {
             "open": "打开",
@@ -244,7 +260,9 @@
             "setLabels": "设置标签...",
             "remove": "删除...",
             "trackers": "Tracker...",
-            "properties": "属性..."
+            "properties": "属性...",
+            "copyName": "复制名称",
+            "copyPath": "复制路径"
         }
     },
     "modals": {
@@ -263,7 +281,8 @@
             "saveInterfaceSettings": "保存界面设置",
             "selectInterfaceSettingsFile": "选择界面设置文件",
             "fileNotChosen": "未选择文件",
-            "unableToReadFile": "读取文件出错"
+            "unableToReadFile": "读取文件出错",
+            "moreNames_one": "... 还有 {{count}} 个"
         },
         "add": {
             "title": "添加种子",
@@ -296,7 +315,8 @@
                 "errorAddingTrackers": "添加 Tracker 出错",
                 "errorRenamingTorrent": "重命名种子失败",
                 "processingMagnetLinks": "正在处理磁力链接（{{current}}/{{total}}）",
-                "processedMagnetLinks_other": "已处理 {{count}} 个磁力链接"
+                "processedMagnetLinks_other": "已处理 {{count}} 个磁力链接",
+                "processedMagnetLinks_one": "已处理 {{count}} 个磁力链接"
             }
         },
         "daemon": {
@@ -381,7 +401,8 @@
                 "magnetLinks": "磁力链接"
             },
             "language": "语言",
-            "sequentialDownload": "顺序下载种子"
+            "sequentialDownload": "顺序下载种子",
+            "blocklistEntries_one": "黑名单包含 {{count}} 个条目"
         }
     },
     "createTorrent": {
@@ -413,7 +434,9 @@
             "calculateSizes": "计算文件大小失败",
             "notFound": "后端未找到创建种子请求"
         },
-        "pieceCount_other": "{{count}} 个分块"
+        "pieceCount_other": "{{count}} 个分块",
+        "fileSummary_one": "{{count}} 个文件，{{size}}，{{pieces}}",
+        "pieceCount_one": "{{count}} 个分块"
     },
     "details": {
         "downloadBar": {
@@ -432,7 +455,9 @@
             "peers": "用户",
             "trackers": "Tracker",
             "serverStatistics": "服务器统计",
-            "spacer": "分隔符"
+            "spacer": "分隔符",
+            "filesCount_one": "文件 ({{count}})",
+            "piecesCount_one": "分块 ({{count}})"
         },
         "sections": {
             "transfer": "传输",
@@ -462,7 +487,10 @@
             "maxPeers": "最大连接数:",
             "tracker": "Tracker",
             "trackerUpdateOn": "下次汇报时间:",
-            "lastActive": "最后活动时间:"
+            "lastActive": "最后活动时间:",
+            "peersOf_one": "{{count}} / {{total}}",
+            "seedsOf_one": "{{count}} / {{total}}",
+            "wastedValue_one": "{{size}} (Hash 校验失败 {{count}} 个)"
         },
         "torrent": {
             "fullPath": "保存路径:",
@@ -477,7 +505,8 @@
             "addedOn": "添加于:",
             "completedOn": "完成于:",
             "magnetLink": "磁力链接:",
-            "labels": "标签:"
+            "labels": "标签:",
+            "piecesValue_one": "{{count}} 个 x {{size}} (已有 {{have}})"
         },
         "stats": {
             "downloaded": "已下载",
@@ -574,7 +603,9 @@
         "timeFormats": {
             "12h": "12 小时制",
             "24h": "24 小时制"
-        }
+        },
+        "selectFilterGroupOnDbClk": "双击全选分组",
+        "showRunStatus": "显示运行状态"
     },
     "server": {
         "error": {
@@ -598,7 +629,8 @@
         "delete": "删除",
         "remove": "删除",
         "cancel": "取消",
-        "errorRemoving": "删除种子出错"
+        "errorRemoving": "删除种子出错",
+        "deleteDataWhenOneSelection": "单选种子时也删除数据"
     },
     "editLabels": {
         "canNotSetLabels": "无法设置标签",
@@ -684,5 +716,10 @@
         "hide": "隐藏",
         "quit": "退出",
         "minimize": "最小化"
+    },
+    "runStatus": {
+        "idle": "空闲",
+        "selectedTorrent": "选中项",
+        "noSelection": "未选中任何种子"
     }
 }
