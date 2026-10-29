@@ -15,7 +15,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="${VERSION:-$(git describe --tags --always 2>/dev/null || echo "dev")}"
-ZIPNAME="trguing-web-${VERSION}-zh.zip"
+# 允许调用方直接传入带 -zh 后缀的版本号，避免出现 -zh-zh
+case "$VERSION" in
+    *-zh) ZIPNAME="trguing-web-${VERSION}.zip" ;;
+    *)    ZIPNAME="trguing-web-${VERSION}-zh.zip" ;;
+esac
 
 echo "==> 版本号: ${VERSION}"
 
