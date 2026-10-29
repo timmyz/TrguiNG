@@ -8,3 +8,6 @@ tests/manual.torrent
 src/build
 .DS_Store
 *.mmdb
+
+# 发布包（由 ci/build_web_zh.sh 生成，不入库）
+trguing-web-*.zip
