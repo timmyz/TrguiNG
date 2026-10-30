@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ActionIcon, Box, Group, Menu, TextInput } from "@mantine/core";
+import { ActionIcon, Box, Divider, Group, Menu, Stack, Text, TextInput, Tooltip } from "@mantine/core";
 import * as Icon from "react-bootstrap-icons";
 import classes from "./common.module.css";
 import type {
@@ -651,6 +651,46 @@ interface EditableNameFieldProps extends React.PropsWithChildren {
     onUpdate?: (newName: string, onStart: () => void, onEnd: () => void) => void,
     onArrowLeftRight?: (key: string) => void,
     extensionLength?: number,
+    // Extra lines shown in the tooltip below the full name.
+    tooltipDownloadDir?: string,
+    tooltipError?: string,
+}
+
+// Tooltip body shown when the name does not fit into the cell. It carries the
+// full name plus, when available, the save directory and the error of the
+// torrent, so that everything that is hidden by the narrow column is still
+// reachable.
+function NameTooltip(props: {
+    name: string,
+    downloadDir?: string,
+    error?: string,
+    downloadDirLabel: string,
+    errorLabel: string,
+}) {
+    const hasDetails = (props.downloadDir !== undefined && props.downloadDir !== "")
+        || (props.error !== undefined && props.error !== "");
+    return <Stack gap="xs">
+        <Text size="sm" fw={500} style={{ wordBreak: "break-all" }}>{props.name}</Text>
+        {hasDetails && <Divider my={2} />}
+        {props.downloadDir !== undefined && props.downloadDir !== "" && <Group gap="xs" wrap="nowrap" align="flex-start">
+            <Icon.Folder size="0.9rem" style={{ flexShrink: 0, marginTop: 2 }} />
+            <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap", flexShrink: 0 }}>{props.downloadDirLabel}</Text>
+            <Text size="xs" style={{ wordBreak: "break-all" }}>{props.downloadDir}</Text>
+        </Group>}
+        {props.error !== undefined && props.error !== "" && <Group gap="xs" wrap="nowrap" align="flex-start">
+            <Icon.ExclamationTriangle
+                size="0.9rem"
+                style={{ flexShrink: 0, marginTop: 2, color: "light-dark(var(--mantine-color-red-7), var(--mantine-color-red-4))" }}
+            />
+            <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap", flexShrink: 0 }}>{props.errorLabel}</Text>
+            <Text
+                size="xs"
+                style={{ wordBreak: "break-all", color: "light-dark(var(--mantine-color-red-7), var(--mantine-color-red-4))" }}
+            >
+                {props.error}
+            </Text>
+        </Group>}
+    </Stack>;
 }
 
 export function EditableNameField(props: EditableNameFieldProps) {
@@ -748,14 +788,29 @@ export function EditableNameField(props: EditableNameFieldProps) {
                     autoCapitalize="off"
                     spellCheck="false"
                 />
-                : <Box
-                    ref={innerRef}
-                    pl="xs"
-                    style={{ flexGrow: 1, textOverflow: "ellipsis", overflow: "hidden" }}
-                    title={showNameTooltip ? props.currentName : undefined}
+                : <Tooltip
+                    disabled={!showNameTooltip}
+                    label={<NameTooltip
+                        name={props.currentName}
+                        downloadDir={props.tooltipDownloadDir}
+                        error={props.tooltipError}
+                        downloadDirLabel={t("torrents.tooltip.downloadDir")}
+                        errorLabel={t("torrents.tooltip.error")}
+                    />}
+                    multiline
+                    withArrow
+                    openDelay={300}
+                    position="bottom-start"
+                    maw={30 * 60}
                 >
-                    {props.currentName}
-                </Box>}
+                    <Box
+                        ref={innerRef}
+                        pl="xs"
+                        style={{ flexGrow: 1, textOverflow: "ellipsis", overflow: "hidden" }}
+                    >
+                        {props.currentName}
+                    </Box>
+                </Tooltip>}
             {isHover && !isRenaming && props.onUpdate !== undefined
                 ? <ActionIcon
                     variant="subtle"

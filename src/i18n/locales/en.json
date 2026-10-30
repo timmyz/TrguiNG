@@ -264,6 +264,10 @@
             "properties": "Properties...",
             "copyName": "Copy name",
             "copyPath": "Copy path"
+        },
+        "tooltip": {
+            "downloadDir": "Save directory",
+            "error": "Error"
         }
     },
     "modals": {

@@ -264,6 +264,10 @@
             "properties": "属性...",
             "copyName": "复制名称",
             "copyPath": "复制路径"
+        },
+        "tooltip": {
+            "downloadDir": "保存目录",
+            "error": "错误"
         }
     },
     "modals": {

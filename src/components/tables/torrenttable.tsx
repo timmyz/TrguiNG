@@ -220,7 +220,12 @@ function NameField(props: TableFieldProps) {
     const rpcVersion = useServerRpcVersion();
 
     return (
-        <EditableNameField currentName={currentName} onUpdate={rpcVersion >= 15 ? updateTorrentName : undefined}>
+        <EditableNameField
+            currentName={currentName}
+            onUpdate={rpcVersion >= 15 ? updateTorrentName : undefined}
+            tooltipDownloadDir={props.torrent.downloadDir}
+            tooltipError={props.torrent.cachedError}
+        >
             <Box pb="xs" className="icon-container">
                 <StatusIcon />
             </Box>

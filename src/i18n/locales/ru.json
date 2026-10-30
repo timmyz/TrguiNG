@@ -223,6 +223,10 @@
             "remove": "Удалить...",
             "trackers": "Трекеры...",
             "properties": "Свойства..."
+        },
+        "tooltip": {
+            "downloadDir": "Каталог сохранения",
+            "error": "Ошибка"
         }
     },
     "modals": {
