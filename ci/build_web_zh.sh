@@ -14,7 +14,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-VERSION="${VERSION:-$(git describe --tags --always 2>/dev/null || echo "dev")}"
+VERSION="${VERSION:-$(jq -r .version package.json)}"
 # 允许调用方直接传入带 -zh 后缀的版本号，避免出现 -zh-zh
 case "$VERSION" in
     *-zh) BASE_VERSION="${VERSION%-zh}" ;;

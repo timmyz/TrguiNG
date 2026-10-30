@@ -12,6 +12,7 @@
 | 项目 | 版本 |
 |---|---|
 | 上游基线 | **v1.5.1**（`611f8d8`，2026-10-26） |
+| 本仓库版本 | **v1.5.2-zh** |
 | i18n 框架 | 合并自上游 PR [#339](https://github.com/openscopeproject/TrguiNG/pull/339)（ManuZhu0728） |
 | Tauri | v2.12 |
 | Mantine | v8 |
@@ -65,6 +66,8 @@ src-tauri/src/i18n.rs     # Rust 端，与前端共用同一份 JSON 资源
 | **tr3 批量改 Tracker** | 种子列表右键 | 在 transmission 4.0 以下也允许对多个选中种子批量修改 Tracker |
 | **拖拽批量添加** | 添加种子 | 一次拖入多个种子文件时逐个处理，而非只处理第一个 |
 | **磁力链接下载间隔** | 添加种子 | 批量添加磁力链接时可设置间隔秒数 |
+| **分享率按数值变色** | 种子列表 | 分享率 `< 1` 红、`1 ~ seedRatioLimit` 橙、`≥ seedRatioLimit` 绿，PT 站一眼看清资源情况 |
+| **表格行分隔线** | 所有表格 | 行间横线，密集列时更易对位 |
 
 ### 与上游重复、已改用上游实现的部分
 
@@ -75,6 +78,17 @@ src-tauri/src/i18n.rs     # Rust 端，与前端共用同一份 JSON 资源
 | 字体大小设置 | 上游 `fontSize` / `fontSizeBase` |
 | TB / EB 体积单位 | 上游大 SI 单位支持 |
 | 进度条静态/动态/多颜色 | 上游 `animatedProgressbars` + `colorfulProgressbars` |
+
+### 界面开关
+
+以下显示选项在工具栏「布局」菜单中切换，Web 版与桌面版均可用：
+
+- 隐藏 / 展示运行状态
+- 切换分享率变色
+- 切换表格行分隔线
+
+分享率变色的上界取自服务端的 `seedRatioLimit`（transmission 中「达到该分享率自动停止做种」的阈值，默认 2），
+因此无需额外配置即可与站点达标线对齐。
 
 ### 旧配置迁移
 

@@ -23,4 +23,7 @@ backup_file tauri.conf.json
 jq ".version = \"$VERSION\"" tauri.conf.json.bkp > tauri.conf.json
 
 backup_file Cargo.toml
-sed -i -E "s/^version = \"[0-9]+\\.[0-9]+\\.[0-9]+\"\$/version = \"$VERSION\"/g" Cargo.toml
+# BSD sed (macOS) does not support the "+" quantifier in basic regular
+# expressions, so the substitution silently matched nothing there. Use perl,
+# which is available on both macOS and Linux.
+perl -pi -e "s/^version = \"[0-9]+\\.[0-9]+\\.[0-9]+\"\$/version = \"$VERSION\"/g" Cargo.toml
