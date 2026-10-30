@@ -17,11 +17,19 @@ cd "$(dirname "$0")/.."
 VERSION="${VERSION:-$(git describe --tags --always 2>/dev/null || echo "dev")}"
 # 允许调用方直接传入带 -zh 后缀的版本号，避免出现 -zh-zh
 case "$VERSION" in
-    *-zh) ZIPNAME="trguing-web-${VERSION}.zip" ;;
-    *)    ZIPNAME="trguing-web-${VERSION}-zh.zip" ;;
+    *-zh) BASE_VERSION="${VERSION%-zh}" ;;
+    *)    BASE_VERSION="$VERSION" ;;
 esac
+ZIPNAME="trguing-web-${BASE_VERSION}-zh.zip"
 
-echo "==> 版本号: ${VERSION}"
+# 「关于」弹窗显示的版本串。webpack.common.mjs 优先取 TRGUING_VERSION，
+# 未设置时才回退到 `git describe`——后者在本地标签不可达时会退化成裸 SHA，
+# 对终端用户毫无意义，因此这里显式注入。
+# 沿用汉化版历史命名习惯：trguing-web-v<版本>-zh
+export TRGUING_VERSION="${TRGUING_VERSION:-trguing-web-v${BASE_VERSION}-zh}"
+
+echo "==> 版本号: ${BASE_VERSION}"
+echo "==> 关于弹窗版本串: ${TRGUING_VERSION}"
 
 if [ ! -d node_modules ] || [ ! -d node_modules/.bin ]; then
     echo "==> 安装依赖 (npm ci)"
