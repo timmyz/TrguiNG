@@ -70,6 +70,8 @@ interface ToolbarProps {
     toggleMainSplit: () => void,
     toggleTabStrip: () => void,
     toggleRunStatus?: () => void,
+    toggleColorizeUploadRatio?: () => void,
+    toggleTableRowSeparators?: () => void,
 }
 
 function useButtonHandlers(
@@ -542,6 +544,18 @@ function Toolbar(props: ToolbarProps) {
                             rightSection={<Kbd>{`${modKeyString()} R`}</Kbd>}
                         >
                             {t("toolbar.toggleRunStatus")}
+                        </Menu.Item>}
+                    {props.toggleColorizeUploadRatio !== undefined
+                        && <Menu.Item
+                            onClick={props.toggleColorizeUploadRatio}
+                        >
+                            {t("toolbar.toggleColorizeUploadRatio")}
+                        </Menu.Item>}
+                    {props.toggleTableRowSeparators !== undefined
+                        && <Menu.Item
+                            onClick={props.toggleTableRowSeparators}
+                        >
+                            {t("toolbar.toggleTableRowSeparators")}
                         </Menu.Item>}
                     <Menu.Divider />
                     <Menu.Label>{t("toolbar.interfaceSettings")}</Menu.Label>

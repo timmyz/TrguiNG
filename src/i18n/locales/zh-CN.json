@@ -43,7 +43,9 @@
         "pauseAllTorrents": "暂停所有种子",
         "pauseErrorTorrents": "暂停错误的种子",
         "pauseDownloadingTorrents": "暂停下载中的种子",
-        "toggleRunStatus": "隐藏/展示运行状态"
+        "toggleRunStatus": "隐藏/展示运行状态",
+        "toggleColorizeUploadRatio": "切换分享率变色",
+        "toggleTableRowSeparators": "切换表格行分隔线"
     },
     "statusbar": {
         "showGlobalSpeeds": "显示全局速度",

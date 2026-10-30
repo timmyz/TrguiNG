@@ -80,6 +80,12 @@
     width: 100%;
 }
 
+/* Optional horizontal separator between table rows. Enabled by the
+   "show table row separators" interface option. */
+.torrent-table-container.with-row-separators .tr {
+    border-bottom: 1px solid light-dark(rgba(0, 0, 0, 0.12), rgba(255, 255, 255, 0.12));
+}
+
 .torrent-table .tr:nth-child(odd)::before {
     content: '';
     position: absolute;

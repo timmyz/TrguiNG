@@ -234,6 +234,8 @@ interface Settings {
         showFiltersPanel: boolean,
         showDetailsPanel: boolean,
         showRunStatus: boolean,
+        colorizeUploadRatio: boolean,
+        showTableRowSeparators: boolean,
         detailsTabs: SectionsVisibility<DetailsSectionsName>,
         showFilesSearchBox: boolean,
         flatFileTree: boolean,
@@ -370,6 +372,8 @@ const DefaultSettings: Settings = {
         showFiltersPanel: true,
         showDetailsPanel: true,
         showRunStatus: true,
+        colorizeUploadRatio: true,
+        showTableRowSeparators: true,
         detailsTabs: DetailsSections.map((section) => ({
             section,
             visible: true,

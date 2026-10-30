@@ -28,6 +28,7 @@ import type { TorrentFilter } from "./filters";
 import { DefaultFilter, Filters } from "./filters";
 import { Statusbar } from "./statusbar";
 import { TorrentTable, useInitialTorrentRequiredFields } from "./tables/torrenttable";
+import { TableDisplayContext } from "./tables/common";
 import { MemoizedToolbar } from "./toolbar";
 import { useSession, useTorrentList } from "queries";
 import type { TorrentFieldsType } from "rpc/transmission";
@@ -222,6 +223,24 @@ export function Server({ hostname, tabsRef, toolbarExtra, toggleTabStrip }: Serv
     const [showFiltersPanel, { toggle: toggleFiltersPanel }] = useDisclosure(config.values.interface.showFiltersPanel);
     const [showDetailsPanel, { toggle: toggleDetailsPanel }] = useDisclosure(config.values.interface.showDetailsPanel);
     const [showRunStatus, { toggle: toggleShowRunStatus }] = useDisclosure(config.values.interface.showRunStatus);
+    const [colorizeUploadRatio, setColorizeUploadRatio] = useState(config.values.interface.colorizeUploadRatio);
+    const [showTableRowSeparators, setShowTableRowSeparators] = useState(config.values.interface.showTableRowSeparators);
+
+    // The config object is mutable and does not trigger re-renders, so the
+    // new value is written before the state update to make sure the tables
+    // pick it up on the very same render.
+    const toggleColorizeUploadRatio = useCallback(() => {
+        const next = !config.values.interface.colorizeUploadRatio;
+        config.values.interface.colorizeUploadRatio = next;
+        setColorizeUploadRatio(next);
+    }, [config]);
+
+    const toggleTableRowSeparators = useCallback(() => {
+        const next = !config.values.interface.showTableRowSeparators;
+        config.values.interface.showTableRowSeparators = next;
+        setShowTableRowSeparators(next);
+    }, [config]);
+
     const [mainSplit, toggleMainSplit] = useToggle<SplitType>([
         config.values.interface.mainSplit,
         config.values.interface.mainSplit === "vertical" ? "horizontal" : "vertical"]);
@@ -233,104 +252,113 @@ export function Server({ hostname, tabsRef, toolbarExtra, toggleTabStrip }: Serv
         config.values.interface.mainSplit = mainSplit;
     }, [config, showFiltersPanel, showDetailsPanel, showRunStatus, mainSplit]);
 
+    useEffect(() => {
+        config.values.interface.colorizeUploadRatio = colorizeUploadRatio;
+        config.values.interface.showTableRowSeparators = showTableRowSeparators;
+    }, [config, colorizeUploadRatio, showTableRowSeparators]);
+
     return <ServerContext data={serverData} selected={selectedTorrents} rpc={rpcVersion}>
-        <Flex direction="column" className={classes.serverContainer}>
-            <MemoizedServerModals ref={modals} {...{ runUpdates, tabsRef }} serverName={serverConfig.name} />
-            {overlayVisible && <Overlay blur={10}>
-                <Flex
-                    align="center"
-                    justify="center"
-                    h="100%"
-                    direction="column"
-                    gap="xl"
-                >
-                    {sessionIsLoading
-                        ? <Loader size="xl" />
-                        : sessionIsError
-                            ? <>
-                                <Title c="red" order={1}>{t("server.error.loadSession")}</Title>
-                                <Title c="red" order={3}>{(sessionError as Error).message}</Title>
-                            </>
-                            : session?.["rpc-version"] === undefined
-                                ? <Title c="red" order={1}>{t("server.error.notDaemon")}</Title>
-                                : rpcVersion < 14
-                                    ? <Title c="red" order={1}>{t("server.error.versionRequired")}</Title>
-                                    : <></>}
-                </Flex>
-            </Overlay>}
-            <Box p="sm" className={classes.toolbarContainer}>
-                <MemoizedToolbar
-                    setSearchTerms={setSearchTerms}
-                    modals={modals}
-                    altSpeedMode={session?.["alt-speed-enabled"] as boolean ?? false}
-                    extra={toolbarExtra}
-                    toggleFiltersPanel={toggleFiltersPanel}
-                    toggleDetailsPanel={toggleDetailsPanel}
-                    toggleMainSplit={toggleMainSplit}
-                    toggleRunStatus={toggleShowRunStatus}
-                    toggleTabStrip={toggleTabStrip}
-                />
-            </Box>
-            <SplitLayout
-                key={`split-${showFiltersPanel ? "1" : "0"}-${showDetailsPanel ? "1" : "0"}-${mainSplit}`}
-                mainSplit={mainSplit}
-                left={showFiltersPanel
-                    ? <div className="scrollable">
-                        <Filters
-                            torrents={torrents ?? []}
-                            currentFilters={currentFilters}
-                            setCurrentFilters={setCurrentFilters}
-                            selectedReducer={selectedReducer}
-                            setCurrentTorrentId={setCurrentTorrent}
-                        />
-                    </div>
-                    : undefined}
-                right={
-                    <TorrentTable
-                        modals={modals}
-                        torrents={filteredTorrents}
-                        setCurrentTorrent={setCurrentTorrent}
-                        selectedTorrents={selectedTorrents}
-                        selectedReducer={selectedReducer}
-                        onColumnVisibilityChange={setTableRequiredFields}
-                        scrollToRow={scrollToRow}
-                    />
-                }
-                bottom={showDetailsPanel
-                    ? <MemoizedDetails torrentId={currentTorrent} updates={updates} />
-                    : undefined}
-            />
-            {showRunStatus && (
-                <Box
-                    px="xs"
-                    pt={4}
-                    pb={4}
-                    style={{ borderTop: "1px solid var(--mantine-color-dark-3)" }}
-                >
-                    <Flex direction="column" gap={2}>
-                        <Text size="xs" fw={600} truncate="end">{statusTitle}</Text>
-                        <Textarea
-                            readOnly
-                            autosize
-                            minRows={1}
-                            maxRows={8}
-                            value={statusContent}
-                            styles={{ input: { fontFamily: "monospace", fontSize: "var(--mantine-font-size-xs)" } }}
-                        />
+        <TableDisplayContext.Provider value={{ colorizeUploadRatio, showRowSeparators: showTableRowSeparators }}>
+            <Flex direction="column" className={classes.serverContainer}>
+                <MemoizedServerModals ref={modals} {...{ runUpdates, tabsRef }} serverName={serverConfig.name} />
+                {overlayVisible && <Overlay blur={10}>
+                    <Flex
+                        align="center"
+                        justify="center"
+                        h="100%"
+                        direction="column"
+                        gap="xl"
+                    >
+                        {sessionIsLoading
+                            ? <Loader size="xl" />
+                            : sessionIsError
+                                ? <>
+                                    <Title c="red" order={1}>{t("server.error.loadSession")}</Title>
+                                    <Title c="red" order={3}>{(sessionError as Error).message}</Title>
+                                </>
+                                : session?.["rpc-version"] === undefined
+                                    ? <Title c="red" order={1}>{t("server.error.notDaemon")}</Title>
+                                    : rpcVersion < 14
+                                        ? <Title c="red" order={1}>{t("server.error.versionRequired")}</Title>
+                                        : <></>}
                     </Flex>
+                </Overlay>}
+                <Box p="sm" className={classes.toolbarContainer}>
+                    <MemoizedToolbar
+                        setSearchTerms={setSearchTerms}
+                        modals={modals}
+                        altSpeedMode={session?.["alt-speed-enabled"] as boolean ?? false}
+                        extra={toolbarExtra}
+                        toggleFiltersPanel={toggleFiltersPanel}
+                        toggleDetailsPanel={toggleDetailsPanel}
+                        toggleMainSplit={toggleMainSplit}
+                        toggleRunStatus={toggleShowRunStatus}
+                        toggleTabStrip={toggleTabStrip}
+                        toggleColorizeUploadRatio={toggleColorizeUploadRatio}
+                        toggleTableRowSeparators={toggleTableRowSeparators}
+                    />
                 </Box>
-            )}
-            <Box px="xs" className={classes.statusbarContainer}>
-                <Statusbar {...{
-                    session,
-                    filteredTorrents,
-                    selectedTorrents,
-                    hostname,
-                    torrents: torrents ?? [],
-                    showMisc: Boolean(toolbarExtra),
-                }}
+                <SplitLayout
+                    key={`split-${showFiltersPanel ? "1" : "0"}-${showDetailsPanel ? "1" : "0"}-${mainSplit}`}
+                    mainSplit={mainSplit}
+                    left={showFiltersPanel
+                        ? <div className="scrollable">
+                            <Filters
+                                torrents={torrents ?? []}
+                                currentFilters={currentFilters}
+                                setCurrentFilters={setCurrentFilters}
+                                selectedReducer={selectedReducer}
+                                setCurrentTorrentId={setCurrentTorrent}
+                            />
+                        </div>
+                        : undefined}
+                    right={
+                        <TorrentTable
+                            modals={modals}
+                            torrents={filteredTorrents}
+                            setCurrentTorrent={setCurrentTorrent}
+                            selectedTorrents={selectedTorrents}
+                            selectedReducer={selectedReducer}
+                            onColumnVisibilityChange={setTableRequiredFields}
+                            scrollToRow={scrollToRow}
+                        />
+                    }
+                    bottom={showDetailsPanel
+                        ? <MemoizedDetails torrentId={currentTorrent} updates={updates} />
+                        : undefined}
                 />
-            </Box>
-        </Flex>
+                {showRunStatus && (
+                    <Box
+                        px="xs"
+                        pt={4}
+                        pb={4}
+                        style={{ borderTop: "1px solid var(--mantine-color-dark-3)" }}
+                    >
+                        <Flex direction="column" gap={2}>
+                            <Text size="xs" fw={600} truncate="end">{statusTitle}</Text>
+                            <Textarea
+                                readOnly
+                                autosize
+                                minRows={1}
+                                maxRows={8}
+                                value={statusContent}
+                                styles={{ input: { fontFamily: "monospace", fontSize: "var(--mantine-font-size-xs)" } }}
+                            />
+                        </Flex>
+                    </Box>
+                )}
+                <Box px="xs" className={classes.statusbarContainer}>
+                    <Statusbar {...{
+                        session,
+                        filteredTorrents,
+                        selectedTorrents,
+                        hostname,
+                        torrents: torrents ?? [],
+                        showMisc: Boolean(toolbarExtra),
+                    }}
+                    />
+                </Box>
+            </Flex>
+        </TableDisplayContext.Provider>
     </ServerContext>;
 }

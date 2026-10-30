@@ -43,7 +43,9 @@
         "pauseAllTorrents": "Pause all torrents",
         "pauseErrorTorrents": "Pause torrents with errors",
         "pauseDownloadingTorrents": "Pause downloading torrents",
-        "toggleRunStatus": "Toggle run status"
+        "toggleRunStatus": "Toggle run status",
+        "toggleColorizeUploadRatio": "Toggle share ratio colouring",
+        "toggleTableRowSeparators": "Toggle table row separators"
     },
     "statusbar": {
         "showGlobalSpeeds": "Show global speeds",
