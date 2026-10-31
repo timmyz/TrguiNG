@@ -12,7 +12,7 @@
 | 项目 | 版本 |
 |---|---|
 | 上游基线 | **v1.5.1**（`611f8d8`，2026-10-26） |
-| 本仓库版本 | **v1.5.3-zh** |
+| 本仓库版本 | **v1.5.4-zh** |
 | i18n 框架 | 合并自上游 PR [#339](https://github.com/openscopeproject/TrguiNG/pull/339)（ManuZhu0728） |
 | Tauri | v2.12 |
 | Mantine | v8 |
