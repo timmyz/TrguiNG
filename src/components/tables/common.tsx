@@ -524,12 +524,10 @@ export interface TrguiTableRef {
 // does not trigger re-renders on its own.
 export interface TableDisplaySettings {
     colorizeUploadRatio: boolean,
-    showRowSeparators: boolean,
 }
 
 export const TableDisplayContext = React.createContext<TableDisplaySettings>({
     colorizeUploadRatio: true,
-    showRowSeparators: true,
 });
 
 export function TrguiTable<TData>(props: {
@@ -558,8 +556,6 @@ export function TrguiTable<TData>(props: {
     const [lastIndex, onRowClick] = useSelectHandler(
         table, props.selectedReducer, props.getRowId, props.setCurrent);
 
-    const tableDisplay = useContext(TableDisplayContext);
-
     const [parentRef, rowHeight, virtualizer] = useTableVirtualizer(table.getRowModel().rows.length);
 
     const scrollToId = useMemo(() => {
@@ -579,7 +575,7 @@ export function TrguiTable<TData>(props: {
     const [parentRefProxy, headerRefProxy, syncHeaderScroll] = useSynchronizedScroll(parentRef, headerRef);
 
     return (
-        <div className={`torrent-table-container${tableDisplay.showRowSeparators ? " with-row-separators" : ""}`}>
+        <div className="torrent-table-container">
             <Box
                 ref={headerRefProxy}
                 className={classes.tableHeaderContainer}

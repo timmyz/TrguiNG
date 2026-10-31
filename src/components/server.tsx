@@ -224,7 +224,6 @@ export function Server({ hostname, tabsRef, toolbarExtra, toggleTabStrip }: Serv
     const [showDetailsPanel, { toggle: toggleDetailsPanel }] = useDisclosure(config.values.interface.showDetailsPanel);
     const [showRunStatus, { toggle: toggleShowRunStatus }] = useDisclosure(config.values.interface.showRunStatus);
     const [colorizeUploadRatio, setColorizeUploadRatio] = useState(config.values.interface.colorizeUploadRatio);
-    const [showTableRowSeparators, setShowTableRowSeparators] = useState(config.values.interface.showTableRowSeparators);
 
     // The config object is mutable and does not trigger re-renders, so the
     // new value is written before the state update to make sure the tables
@@ -233,12 +232,6 @@ export function Server({ hostname, tabsRef, toolbarExtra, toggleTabStrip }: Serv
         const next = !config.values.interface.colorizeUploadRatio;
         config.values.interface.colorizeUploadRatio = next;
         setColorizeUploadRatio(next);
-    }, [config]);
-
-    const toggleTableRowSeparators = useCallback(() => {
-        const next = !config.values.interface.showTableRowSeparators;
-        config.values.interface.showTableRowSeparators = next;
-        setShowTableRowSeparators(next);
     }, [config]);
 
     const [mainSplit, toggleMainSplit] = useToggle<SplitType>([
@@ -254,11 +247,10 @@ export function Server({ hostname, tabsRef, toolbarExtra, toggleTabStrip }: Serv
 
     useEffect(() => {
         config.values.interface.colorizeUploadRatio = colorizeUploadRatio;
-        config.values.interface.showTableRowSeparators = showTableRowSeparators;
-    }, [config, colorizeUploadRatio, showTableRowSeparators]);
+    }, [config, colorizeUploadRatio]);
 
     return <ServerContext data={serverData} selected={selectedTorrents} rpc={rpcVersion}>
-        <TableDisplayContext.Provider value={{ colorizeUploadRatio, showRowSeparators: showTableRowSeparators }}>
+        <TableDisplayContext.Provider value={{ colorizeUploadRatio }}>
             <Flex direction="column" className={classes.serverContainer}>
                 <MemoizedServerModals ref={modals} {...{ runUpdates, tabsRef }} serverName={serverConfig.name} />
                 {overlayVisible && <Overlay blur={10}>
@@ -295,7 +287,6 @@ export function Server({ hostname, tabsRef, toolbarExtra, toggleTabStrip }: Serv
                         toggleRunStatus={toggleShowRunStatus}
                         toggleTabStrip={toggleTabStrip}
                         toggleColorizeUploadRatio={toggleColorizeUploadRatio}
-                        toggleTableRowSeparators={toggleTableRowSeparators}
                     />
                 </Box>
                 <SplitLayout
